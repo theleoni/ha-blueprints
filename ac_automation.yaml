@@ -1,0 +1,252 @@
+blueprint:
+  domain: automation
+  homeassistant:
+    min_version: 2024.12.1
+  author: Guilherme C. Leoni (https://github.com/theleoni)
+  source_url: https://www.github.com/theleoni/ha-blueprints
+
+  name: AC Automation
+  # description: TBD
+
+  input:
+    ac_device:
+      name: AC Device
+      selector:
+        entity:
+          filter:
+            domain: climate
+    occupancy_select:
+      name: Occupancy
+      selector:
+        entity:
+          filter:
+            domain: input_select
+
+    fan_on:
+      name: AC FAN additional Options
+      icon: mdi:fan
+      input:
+        fan_on_condition:
+          name: Condition
+          default: []
+          selector:
+            condition:
+        fan_on_action:
+          name: Action
+          default: []
+          selector:
+            action:
+
+    cool_on:
+      name: AC COOL additional Options
+      icon: mdi:snowflake
+      input:
+        cool_on_condition:
+          name: Condition
+          default: []
+          selector:
+            condition:
+        cool_on_action:
+          name: Action
+          default: []
+          selector:
+            action:
+
+    additional-options:
+      name: More control
+      icon: mdi:format-list-checks
+      collapsed: false
+      input:
+        consider_pet_occupancy:
+          name: Check Pet Occupancy
+          description: If A Pet is alone at home will ignore the cccypancy Nobody home
+          default: false
+          selector:
+            boolean:
+
+mode: single # single | restart | queued | parallel
+# max: 10
+# max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id:
+      - input_boolean.runallautomation
+    to: "on"
+  - trigger: state
+    entity_id:
+      - !input occupancy_select
+    to: Nobody home
+  - trigger: state
+    entity_id:
+      - !input occupancy_select
+    to: Nobody home
+    for:
+      hours: 1
+      minutes: 30
+      seconds: 0
+  - trigger: state
+    entity_id:
+      - !input occupancy_select
+    to: Long Occupancy
+    from: Short Occupancy
+  - trigger: state
+    entity_id:
+      - !input occupancy_select
+    to: Long Occupancy
+    from: Empty
+  - trigger: state
+    entity_id:
+      - !input occupancy_select
+    to: Long Occupancy
+    from: Nobody home
+  - trigger: state
+    entity_id:
+      - !input occupancy_select
+    to: Gaming
+
+conditions:
+  - condition: state
+    entity_id: input_boolean.stopallautomation
+    state: "off"
+
+actions:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: !input occupancy_select
+            state: Nobody home
+        sequence:
+          - if:
+              - condition: state
+                entity_id: binary_sensor.isdayhour
+                state: "on"
+            then:
+              - if:
+                  - condition: or
+                    conditions:
+                      - condition: and
+                        conditions:
+                          - condition: state
+                            entity_id: !input occupancy_select
+                            state: Nobody home
+                            for:
+                              hours: 1
+                              minutes: 30
+                              seconds: 0
+                          - condition: state
+                            entity_id: !input ac_device
+                            state: cool
+                        alias: COOL & Nobody home (long time)
+                      - condition: not
+                        conditions:
+                          - condition: state
+                            entity_id: !input ac_device
+                            state: cool
+                        alias: "!COOL"
+                then:
+                  - if:
+                      - condition: not
+                        conditions:
+                          - condition: state
+                            entity_id: !input ac_device
+                            state: "off"
+                    then:
+                      - action: climate.turn_off
+                        metadata: {}
+                        data: {}
+                        target:
+                          entity_id: !input ac_device
+                    alias: Turn OFF AC if it is on
+            else:
+              - if:
+                  - condition: not
+                    conditions:
+                      - condition: state
+                        entity_id: !input ac_device
+                        state: "off"
+                then:
+                  - action: climate.turn_off
+                    metadata: {}
+                    data: {}
+                    target:
+                      entity_id: !input ac_device
+                alias: Turn OFF AC if it is on
+      - conditions:
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: !input occupancy_select
+                state: Empty
+              - condition: and
+                conditions:
+                  - condition: not
+                    conditions:
+                      - condition: template
+                        value_template: !input consider_pet_occupancy
+                  - condition: state
+                    entity_id: !input occupancy_select
+                    state: Pet
+              - condition: state
+                entity_id: !input occupancy_select
+                state: Short Occupancy
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: state
+                    entity_id: input_select.temperature
+                    state: Lightly Hot +1
+                sequence:
+                  - if:
+                      - condition: not
+                        conditions:
+                          - condition: state
+                            entity_id: !input ac_device
+                            state: fan_only
+                    then:
+                      - action: script.office_ac_fan_only
+                        metadata: {}
+                        data: {}
+                      - if:
+                          - condition: template
+                            value_template: "{{ fan_on_condition is not in ['', None] }}"
+                        then:
+                          - if:
+                              - and: !input fan_on_condition
+                            then:
+                              - sequence: !input fan_on_action
+                        else:
+                          - sequence: !input fan_on_action
+
+              - conditions:
+                  - alias: HOT
+                    condition: or
+                    conditions:
+                      - condition: state
+                        entity_id: input_select.temperature
+                        state: Hot +2
+                      - condition: state
+                        entity_id: input_select.temperature
+                        state: Very Hot +3
+                sequence:
+                  - if:
+                      - condition: not
+                        conditions:
+                          - condition: state
+                            entity_id: !input ac_device
+                            state: cool
+                    then:
+                      - action: script.office_ac_cool
+                        metadata: {}
+                        data: {}
+                      - if:
+                          - condition: template
+                            value_template: "{{ cool_on_condition is not in ['', None] }}"
+                        then:
+                          - if:
+                              - and: !input cool_on_condition
+                            then:
+                              - sequence: !input cool_on_action
+                        else:
+                          - sequence: !input cool_on_action
+        alias: Occupied
