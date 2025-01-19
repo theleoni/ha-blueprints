@@ -1,0 +1,272 @@
+blueprint:
+  domain: automation
+  homeassistant:
+    min_version: 2024.12.1
+  author: Guilherme C. Leoni (https://github.com/theleoni)
+  source_url: https://www.github.com/theleoni/ha-blueprints
+
+  name: Buttons Click (HUE Controller) - Multiple Clicks
+  description: Multiple Actions per count of clicks
+
+  input:
+    hue_button:
+      name: Philips HUE Controller Button
+      selector:
+        entity:
+          filter:
+            domain: event
+
+    clickCounter:
+      name: Click Counter
+      selector:
+        entity:
+          filter:
+            domain: counter
+
+    selected_mode:
+      name: Selection Mode
+      description: Define the behavior when circling through multiple clicks
+      default: restart
+      selector:
+        select:
+          multiple: false
+          custom_value: false
+          mode: list # list | dropdown
+          options:
+            - label: Jumps over options (uses delay to cycle through options) - Good for AC
+              value: restart
+            - label: Option after option (Queued) - Good for Lights
+              value: queued
+            - label: Option after option (Parallel)
+              value: parallel
+
+    reset_counter_after_seconds:
+      name: Click Reset Delay (s)
+      description: Time to reset the click counter back to 1
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: slider
+          unit_of_measurement: seconds
+
+    short_press:
+      name: Short Press Actions
+      # description:
+      icon: mdi:gesture-two-double-tap
+      collapsed: false
+      input:
+        short_press_actions_1:
+          name: 1st Click
+          # default: []
+          selector:
+            action:
+        short_press_actions_2:
+          name: 2nd Click
+          # default: []
+          selector:
+            action:
+        short_press_actions_3:
+          name: 3rd (not required)
+          default: []
+          selector:
+            action:
+        short_press_actions_4:
+          name: 4th (not required)
+          default: []
+          selector:
+            action:
+        short_press_actions_5:
+          name: 5th (not required)
+          default: []
+          selector:
+            action:
+        short_press_actions_6:
+          name: 6th (not required)
+          default: []
+          selector:
+            action:
+        short_press_actions_7:
+          name: 7th (not required)
+          default: []
+          selector:
+            action:
+        short_press_actions_8:
+          name: 8th (not required)
+          default: []
+          selector:
+            action:
+    long_press:
+      icon: mdi:gesture-tap-hold
+      input:
+        long_press_actions:
+          name: Long Press Actions
+          # default: []
+          selector:
+            action:
+
+mode: !input selected_mode # single | restart | queued | parallel
+max: 10
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input clickCounter
+    id: resetCounter
+    for:
+      hours: 0
+      minutes: 0
+      seconds: !input reset_counter_after_seconds
+  - trigger: state
+    entity_id: !input hue_button
+    attribute: event_type
+    to: short_release
+    id: shortPress
+  - trigger: state
+    entity_id: !input hue_button
+    attribute: event_type
+    to: long_press
+    id: longPress
+
+conditions: []
+
+actions:
+  - variables:
+      selected_mode_var: !input selected_mode
+
+  - if:
+      - condition: trigger
+        id:
+          - resetCounter
+    then:
+      - if:
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: !input clickCounter
+                state: "0"
+        then:
+          - action: counter.reset
+            metadata: {}
+            data: {}
+            target:
+              entity_id: !input clickCounter
+      - stop: Something
+
+  - action: counter.increment
+    metadata: {}
+    data: {}
+    target:
+      entity_id: !input clickCounter
+
+  - choose:
+      - conditions:
+          - condition: trigger
+            id:
+              - shortPress
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ selected_mode_var == 'restart' }}"
+            then:
+              - delay:
+                  hours: 0
+                  minutes: 0
+                  seconds: 1
+            # else:
+            #   - stop: (Dispositivo ligado) Nada mais a fazer
+          - choose:
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - condition: template
+                        value_template: "{{ short_press_actions_1 is not in ['', None] }}"
+                      - condition: state
+                        entity_id: !input clickCounter
+                        state: "1"
+                sequence: !input short_press_actions_1
+
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - condition: template
+                        value_template: "{{ short_press_actions_2 is not in ['', None] }}"
+                      - condition: state
+                        entity_id: !input clickCounter
+                        state: "2"
+                sequence: !input short_press_actions_2
+
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - condition: template
+                        value_template: "{{ short_press_actions_3 is not in ['', None] }}"
+                      - condition: state
+                        entity_id: !input clickCounter
+                        state: "3"
+                sequence: !input short_press_actions_3
+
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - condition: template
+                        value_template: "{{ short_press_actions_4 is not in ['', None] }}"
+                      - condition: state
+                        entity_id: !input clickCounter
+                        state: "4"
+                sequence: !input short_press_actions_4
+
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - condition: template
+                        value_template: "{{ short_press_actions_5 is not in ['', None] }}"
+                      - condition: state
+                        entity_id: !input clickCounter
+                        state: "5"
+                sequence: !input short_press_actions_5
+
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - condition: template
+                        value_template: "{{ short_press_actions_6 is not in ['', None] }}"
+                      - condition: state
+                        entity_id: !input clickCounter
+                        state: "6"
+                sequence: !input short_press_actions_6
+
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - condition: template
+                        value_template: "{{ short_press_actions_7 is not in ['', None] }}"
+                      - condition: state
+                        entity_id: !input clickCounter
+                        state: "7"
+                sequence: !input short_press_actions_7
+
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - condition: template
+                        value_template: "{{ short_press_actions_8 is not in ['', None] }}"
+                      - condition: state
+                        entity_id: !input clickCounter
+                        state: "8"
+                sequence: !input short_press_actions_8
+
+            default:
+              - action: counter.reset
+                metadata: {}
+                data: {}
+                target:
+                  entity_id: !input clickCounter
+              - stop: Button press item not found
+
+      - conditions:
+          - condition: trigger
+            id:
+              - longPress
+        sequence: !input long_press_actions
