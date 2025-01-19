@@ -1,0 +1,64 @@
+blueprint:
+  domain: automation
+  homeassistant:
+    min_version: 2024.12.1
+  author: Guilherme C. Leoni (https://github.com/theleoni)
+  source_url: https://www.github.com/theleoni/ha-blueprints
+
+  name: Buttons Click (HUE Controller) - Single Click
+  description: Multiple Actions on click
+
+  input:
+    hue_button:
+      name: Philips HUE Controller Button
+      selector:
+        entity:
+          filter:
+            domain: event
+    short_press_actions:
+      name: Short Press Actions
+      default: []
+      selector:
+        action:
+    long_press_actions:
+      name: Long Press Actions
+      default: []
+      selector:
+        action:
+
+mode: parallel # single | restart | queued | parallel
+# max: 2
+# max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input hue_button
+    attribute: event_type
+    to: short_release
+    id: shortPress
+  - trigger: state
+    entity_id: !input hue_button
+    attribute: event_type
+    to: long_press
+    id: longPress
+
+conditions: []
+
+actions:
+  - choose:
+      - conditions:
+          - condition: and
+            conditions:
+              - condition: template
+                value_template: "{{ short_press_actions is not in ['', None] }}"
+              - condition: trigger
+                id: shortPress
+        sequence: !input short_press_actions
+      - conditions:
+          - condition: and
+            conditions:
+              - condition: template
+                value_template: "{{ long_press_actions is not in ['', None] }}"
+              - condition: trigger
+                id: longPress
+        sequence: !input long_press_actions
