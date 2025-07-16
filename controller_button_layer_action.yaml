@@ -1,0 +1,213 @@
+blueprint:
+  domain: automation
+  homeassistant:
+    min_version: 2024.12.1
+  author: Guilherme C. Leoni (https://github.com/theleoni)
+  source_url: https://www.github.com/theleoni/ha-blueprints
+
+  name: Buttons Click (HUE Controller) - Layer Function
+  # description: Multiple Actions per count of clicks
+
+  input:
+    click_counter:
+      name: Click Counter
+      selector:
+        entity:
+          filter:
+            domain: counter
+
+    scene_index:
+      name: Scene Index (in Click Counter)
+      description: Keep in mind the scene sequence (DO NOT KEEP MULTIPLE SCENES WITH THE SAME INDEX)
+      selector:
+        number:
+          min: 0
+          max: 10
+          mode: box
+          unit_of_measurement: index
+
+    first_actions:
+      name: 1st Button
+      # description:
+      icon: mdi:gesture-two-double-tap
+      # collapsed: false
+      input:
+        fisrt_hue_button:
+          name: Philips HUE Controller Button
+          selector:
+            entity:
+              filter:
+                domain: event
+        click_press_actions_first:
+          name: Click Actions
+          default: []
+          selector:
+            action:
+        long_press_actions_first:
+          name: Long Press Actions
+          default: []
+          selector:
+            action:
+
+    second_actions:
+      name: 2nd Button
+      # description:
+      icon: mdi:gesture-two-double-tap
+      # collapsed: false
+      input:
+        second_hue_button:
+          name: Philips HUE Controller Button
+          selector:
+            entity:
+              filter:
+                domain: event
+        click_press_actions_second:
+          name: Click Actions
+          default: []
+          selector:
+            action:
+        long_press_actions_second:
+          name: Long Press Actions
+          default: []
+          selector:
+            action:
+
+    third_actions:
+      name: 3rd Button
+      # description:
+      icon: mdi:gesture-two-double-tap
+      # collapsed: false
+      input:
+        third_hue_button:
+          name: Philips HUE Controller Button
+          selector:
+            entity:
+              filter:
+                domain: event
+        click_press_actions_third:
+          name: Click Actions
+          default: []
+          selector:
+            action:
+        long_press_actions_third:
+          name: Long Press Actions
+          default: []
+          selector:
+            action:
+
+mode: parallel # single | restart | queued | parallel
+max: 10
+max_exceeded: silent
+
+triggers:
+  # First Button
+  - trigger: state
+    entity_id: !input fisrt_hue_button
+    attribute: event_type
+    to: short_release
+    id: firstClick
+  - trigger: state
+    entity_id: !input fisrt_hue_button
+    attribute: event_type
+    to: long_press
+    id: firstLong
+
+  # Second Button
+  - trigger: state
+    entity_id: !input second_hue_button
+    attribute: event_type
+    to: short_release
+    id: secondClick
+  - trigger: state
+    entity_id: !input second_hue_button
+    attribute: event_type
+    to: long_press
+    id: secondLong
+
+  # Third Button
+  - trigger: state
+    entity_id: !input third_hue_button
+    attribute: event_type
+    to: short_release
+    id: thirdClick
+  - trigger: state
+    entity_id: !input third_hue_button
+    attribute: event_type
+    to: long_press
+    id: thirdLong
+
+conditions:
+  - condition: state
+    entity_id: input_boolean.stopallbuttonpress
+    state: "off"
+
+actions:
+  - variables:
+      counter_ent: !input click_counter
+      index_num: !input scene_index
+
+  - if:
+      - condition: not
+        conditions:
+          - condition: template
+            value_template: "{{ is_state(counter_ent, index_num | string) }}"
+    then:
+      - stop: Nothing to do
+
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: firstClick
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ click_press_actions_first is not in ['', None] }}"
+                sequence: !input click_press_actions_first
+      - conditions:
+          - condition: trigger
+            id: firstLong
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ long_press_actions_first is not in ['', None] }}"
+                sequence: !input long_press_actions_first
+
+      - conditions:
+          - condition: trigger
+            id: secondClick
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ click_press_actions_second is not in ['', None] }}"
+                sequence: !input click_press_actions_second
+      - conditions:
+          - condition: trigger
+            id: secondLong
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ long_press_actions_second is not in ['', None] }}"
+                sequence: !input long_press_actions_second
+
+      - conditions:
+          - condition: trigger
+            id: thirdClick
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ click_press_actions_third is not in ['', None] }}"
+                sequence: !input click_press_actions_third
+      - conditions:
+          - condition: trigger
+            id: thirdLong
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ long_press_actions_third is not in ['', None] }}"
+                sequence: !input long_press_actions_third

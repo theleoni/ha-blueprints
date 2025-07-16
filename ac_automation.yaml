@@ -119,7 +119,7 @@ actions:
         sequence:
           - if:
               - condition: state
-                entity_id: binary_sensor.isdayhour
+                entity_id: input_boolean.daylight
                 state: "on"
             then:
               - if:

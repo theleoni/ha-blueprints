@@ -16,15 +16,26 @@ blueprint:
           filter:
             domain: event
 
-    clickCounter:
+    click_counter:
       name: Click Counter
       selector:
         entity:
           filter:
             domain: counter
 
+    reset_counter_after_seconds:
+      name: Click Reset Delay (s)
+      description: Time to reset the click counter back to 1
+      default: 3
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: slider
+          unit_of_measurement: seconds
+
     selected_mode:
-      name: Selection Mode
+      name: Execution Mode
       description: Define the behavior when circling through multiple clicks
       default: restart
       selector:
@@ -39,17 +50,6 @@ blueprint:
               value: queued
             - label: Option after option (Parallel)
               value: parallel
-
-    reset_counter_after_seconds:
-      name: Click Reset Delay (s)
-      description: Time to reset the click counter back to 1
-      default: 3
-      selector:
-        number:
-          min: 1
-          max: 20
-          mode: slider
-          unit_of_measurement: seconds
 
     short_press:
       name: Short Press Actions
@@ -112,7 +112,7 @@ max_exceeded: silent
 
 triggers:
   - trigger: state
-    entity_id: !input clickCounter
+    entity_id: !input click_counter
     id: resetCounter
     for:
       hours: 0
@@ -144,21 +144,21 @@ actions:
           - condition: not
             conditions:
               - condition: state
-                entity_id: !input clickCounter
+                entity_id: !input click_counter
                 state: "0"
         then:
           - action: counter.reset
             metadata: {}
             data: {}
             target:
-              entity_id: !input clickCounter
+              entity_id: !input click_counter
       - stop: Something
 
   - action: counter.increment
     metadata: {}
     data: {}
     target:
-      entity_id: !input clickCounter
+      entity_id: !input click_counter
 
   - choose:
       - conditions:
@@ -183,7 +183,7 @@ actions:
                       - condition: template
                         value_template: "{{ short_press_actions_1 is not in ['', None] }}"
                       - condition: state
-                        entity_id: !input clickCounter
+                        entity_id: !input click_counter
                         state: "1"
                 sequence: !input short_press_actions_1
 
@@ -193,7 +193,7 @@ actions:
                       - condition: template
                         value_template: "{{ short_press_actions_2 is not in ['', None] }}"
                       - condition: state
-                        entity_id: !input clickCounter
+                        entity_id: !input click_counter
                         state: "2"
                 sequence: !input short_press_actions_2
 
@@ -203,7 +203,7 @@ actions:
                       - condition: template
                         value_template: "{{ short_press_actions_3 is not in ['', None] }}"
                       - condition: state
-                        entity_id: !input clickCounter
+                        entity_id: !input click_counter
                         state: "3"
                 sequence: !input short_press_actions_3
 
@@ -213,7 +213,7 @@ actions:
                       - condition: template
                         value_template: "{{ short_press_actions_4 is not in ['', None] }}"
                       - condition: state
-                        entity_id: !input clickCounter
+                        entity_id: !input click_counter
                         state: "4"
                 sequence: !input short_press_actions_4
 
@@ -223,7 +223,7 @@ actions:
                       - condition: template
                         value_template: "{{ short_press_actions_5 is not in ['', None] }}"
                       - condition: state
-                        entity_id: !input clickCounter
+                        entity_id: !input click_counter
                         state: "5"
                 sequence: !input short_press_actions_5
 
@@ -233,7 +233,7 @@ actions:
                       - condition: template
                         value_template: "{{ short_press_actions_6 is not in ['', None] }}"
                       - condition: state
-                        entity_id: !input clickCounter
+                        entity_id: !input click_counter
                         state: "6"
                 sequence: !input short_press_actions_6
 
@@ -243,7 +243,7 @@ actions:
                       - condition: template
                         value_template: "{{ short_press_actions_7 is not in ['', None] }}"
                       - condition: state
-                        entity_id: !input clickCounter
+                        entity_id: !input click_counter
                         state: "7"
                 sequence: !input short_press_actions_7
 
@@ -253,7 +253,7 @@ actions:
                       - condition: template
                         value_template: "{{ short_press_actions_8 is not in ['', None] }}"
                       - condition: state
-                        entity_id: !input clickCounter
+                        entity_id: !input click_counter
                         state: "8"
                 sequence: !input short_press_actions_8
 
@@ -262,7 +262,7 @@ actions:
                 metadata: {}
                 data: {}
                 target:
-                  entity_id: !input clickCounter
+                  entity_id: !input click_counter
               - stop: Button press item not found
 
       - conditions:

@@ -1,0 +1,98 @@
+blueprint:
+  domain: automation
+  homeassistant:
+    min_version: 2024.12.1
+  author: Guilherme C. Leoni (https://github.com/theleoni)
+  source_url: https://www.github.com/theleoni/ha-blueprints
+
+  name: Buttons Click (HUE Controller) - Layer Function (counter)
+  # description: Multiple Actions per count of clicks
+
+  input:
+    click_counter:
+      name: Click Counter
+      selector:
+        entity:
+          filter:
+            domain: counter
+
+    counter_hue_button:
+      name: Philips HUE Controller Button
+      selector:
+        entity:
+          filter:
+            domain: event
+
+    reset_counter_after_seconds:
+      name: Click Reset Delay (s)
+      description: Time to reset the click counter back to 1
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 60
+          mode: slider
+          unit_of_measurement: seconds
+
+mode: parallel # single | restart | queued | parallel
+max: 10
+max_exceeded: silent
+
+triggers:
+  - trigger: state
+    entity_id: !input click_counter
+    id: resetCounter
+    for:
+      hours: 0
+      minutes: 0
+      seconds: !input reset_counter_after_seconds
+
+  # count button
+  - trigger: state
+    entity_id: !input counter_hue_button
+    attribute: event_type
+    to: short_release
+    id: click_counter
+
+  - trigger: state
+    entity_id: !input counter_hue_button
+    attribute: event_type
+    to: long_press
+    id: counterLong
+
+conditions:
+  - condition: state
+    entity_id: input_boolean.stopallbuttonpress
+    state: "off"
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id:
+              - click_counter
+        sequence:
+          - action: counter.increment
+            metadata: {}
+            data: {}
+            target:
+              entity_id: !input click_counter
+
+      - conditions:
+          - condition: trigger
+            id:
+              - counterLong
+              - resetCounter
+        sequence:
+          - if:
+              - condition: not
+                conditions:
+                  - condition: state
+                    entity_id: !input click_counter
+                    state: "0"
+            then:
+              - action: counter.reset
+                metadata: {}
+                data: {}
+                target:
+                  entity_id: !input click_counter
