@@ -1,0 +1,306 @@
+blueprint:
+  domain: automation
+  homeassistant:
+    min_version: 2025.7.0
+  author: Guilherme C. Leoni (https://github.com/theleoni)
+  source_url: https://www.github.com/theleoni/ha-blueprints
+
+  name: Occupancy Updater (IR Motion Sensor)
+  # description:
+
+  #######              INPUT              #######
+  input:
+    entities_selection:
+      name: Entities Selection
+      input:
+        occupancy_selector:
+          name: Occupancy Seletor
+          description: 'It has to have the options: "Short In", "Long", "Short Out", "Empty".'
+          selector:
+            entity:
+              filter:
+                domain: input_select
+
+        motion_sensor:
+          name: IR Motion Sensor
+          selector:
+            entity:
+              # multiple: true # Allow selecting multiple itens
+              filter:
+                device_class:
+                  - motion
+                  - moving
+                  - occupancy
+                  - presence
+
+    time_configs:
+      name: Time configurations
+      input:
+        debounce_off_time:
+          name: Debounce Time to Set as "Off"
+          default: 2
+          selector:
+            number:
+              min: 0
+              max: 30
+              mode: slider
+              unit_of_measurement: minutes
+
+        short_in:
+          name: Short In > Long
+          description: Time with someone before it be considered as "Long" occupancy. It will be affected by "Debounce" time.
+          default: 10
+          selector:
+            number:
+              min: 1
+              max: 20
+              mode: box
+              unit_of_measurement: minutes
+
+        short_out:
+          name: Short Out > Empty
+          description: Time without anyone to consider as "Empty". It will be affected by "Debounce" time.
+          default: 25
+          selector:
+            number:
+              min: 5
+              max: 60
+              mode: box
+              unit_of_measurement: minutes
+
+#######         RUNNING CONFIG          #######
+mode: single # single | restart | queued | parallel
+# max: 2
+# max_exceeded: silent
+
+#######             VARIABLES           #######
+# variables:
+
+#######             TRIGGERS            #######
+triggers:
+  - trigger: state
+    entity_id:
+      - input_boolean.runallstatus
+    from: "off"
+    to: "on"
+
+  - trigger: state
+    entity_id:
+      - input_boolean.issomeoneathome
+    for:
+      hours: 0
+      minutes: 0
+      seconds: 5
+
+  - trigger: state
+    entity_id:
+      - !input motion_sensor
+    to: "on"
+    id: motionOn
+
+  - trigger: state
+    entity_id:
+      - !input motion_sensor
+    to: "off"
+    id: motionOff
+    for:
+      hours: 0
+      minutes: !input debounce_off_time
+      seconds: 0
+
+  - trigger: state
+    entity_id:
+      - !input motion_sensor
+    to: "off"
+    id: motionLongOff
+    for:
+      hours: 0
+      minutes: !input short_out
+      seconds: 0
+
+  - trigger: state
+    entity_id:
+      - !input occupancy_selector
+    for:
+      hours: 0
+      minutes: !input short_in
+      seconds: 0
+    id: officeOccupancyChange
+
+#######            CONDITIONS           #######
+conditions:
+  - condition: state
+    entity_id: input_boolean.stopallstatus
+    state: "off"
+
+#######              ACTIONS            #######
+actions:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: input_boolean.issomeoneathome
+            state: "off"
+        sequence:
+          - action: input_select.select_option
+            metadata: {}
+            data:
+              option: Nobody home
+            target:
+              entity_id: !input occupancy_selector
+            alias: Nobody home
+
+      - conditions:
+          - condition: and
+            conditions:
+              - alias: Has motion?
+                condition: or
+                conditions:
+                  - condition: trigger
+                    id:
+                      - motionOn
+                  - condition: state
+                    entity_id: binary_sensor.hue_motion_sensor_1_motion
+                    state: "on"
+                  - condition: not
+                    conditions:
+                      - condition: state
+                        entity_id: binary_sensor.hue_motion_sensor_1_motion
+                        state: "off"
+                        for:
+                          hours: 0
+                          minutes: !input debounce_off_time
+                          seconds: 0
+              - alias: Is not occupied?
+                condition: or
+                conditions:
+                  - condition: state
+                    entity_id: !input occupancy_selector
+                    state: Nobody home
+                  - condition: state
+                    entity_id: !input occupancy_selector
+                    state: Empty
+                  - condition: state
+                    entity_id: !input occupancy_selector
+                    state: Short In
+              - condition: not
+                conditions:
+                  - condition: state
+                    entity_id: !input occupancy_selector
+                    state: Short In
+                    for:
+                      hours: 0
+                      minutes: !input short_in
+                      seconds: 0
+        sequence:
+          - alias: Short In
+            action: input_select.select_option
+            metadata: {}
+            data:
+              option: Short In
+            target:
+              entity_id: !input occupancy_selector
+        alias: Short In
+
+      - conditions:
+          - condition: and
+            conditions:
+              - alias: Has motion?
+                condition: or
+                conditions:
+                  - condition: trigger
+                    id:
+                      - motionOn
+                  - condition: state
+                    entity_id: binary_sensor.hue_motion_sensor_1_motion
+                    state: "on"
+                  - condition: not
+                    conditions:
+                      - condition: state
+                        entity_id: binary_sensor.hue_motion_sensor_1_motion
+                        state: "off"
+                        for:
+                          hours: 0
+                          minutes: !input debounce_off_time
+                          seconds: 0
+              - alias: Is occupied?
+                condition: or
+                conditions:
+                  - condition: state
+                    entity_id: !input occupancy_selector
+                    state: Short In
+                    for:
+                      hours: 0
+                      minutes: !input short_in
+                      seconds: 0
+                  - condition: state
+                    entity_id: !input occupancy_selector
+                    state: Long
+                  - condition: state
+                    entity_id: !input occupancy_selector
+                    state: Short Out
+        sequence:
+          - alias: Long
+            action: input_select.select_option
+            metadata: {}
+            data:
+              option: Long
+            target:
+              entity_id: !input occupancy_selector
+        alias: Long
+
+      - conditions:
+          - condition: and
+            conditions:
+              - alias: Has motion?
+                condition: or
+                conditions:
+                  - condition: trigger
+                    id: ""
+                    enabled: false
+                  - condition: state
+                    entity_id: binary_sensor.hue_motion_sensor_1_motion
+                    state: "off"
+                    for:
+                      hours: 0
+                      minutes: !input debounce_off_time
+                      seconds: 0
+                  - condition: not
+                    conditions:
+                      - condition: state
+                        entity_id: binary_sensor.hue_motion_sensor_1_motion
+                        state: "off"
+                        for:
+                          hours: 0
+                          minutes: !input short_out
+                          seconds: 0
+              - alias: Is occupied?
+                condition: or
+                conditions:
+                  - condition: state
+                    entity_id: !input occupancy_selector
+                    state: Long
+                  - condition: state
+                    entity_id: !input occupancy_selector
+                    state: Short Out
+                    for:
+                      hours: 0
+                      minutes: !input short_out
+                      seconds: 0
+        sequence:
+          - alias: Short Out
+            action: input_select.select_option
+            metadata: {}
+            data:
+              option: Short Out
+            target:
+              entity_id: !input occupancy_selector
+        alias: Short Out
+
+    default:
+      - action: input_select.select_option
+        metadata: {}
+        data:
+          option: Empty
+        target:
+          entity_id: !input occupancy_selector
+        alias: Empty
