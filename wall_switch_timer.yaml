@@ -1,0 +1,288 @@
+blueprint:
+  domain: automation
+  homeassistant:
+    min_version: 2024.12.1
+  author: Guilherme C. Leoni
+  name: Wall Switch Timer
+
+  input:
+    switch_details:
+      name: Switch Details
+      icon: mdi:toggle-switch
+      input:
+        wall_switch:
+          name: Switch
+          description: The wall switch to control.
+          selector:
+            entity:
+              filter:
+                domain: switch
+        wall_switch_timer:
+          name: Switch's Native Timer
+          description: The number entity that controls the hardware timer.
+          selector:
+            entity:
+              domain: number
+
+    timer_details:
+      name: Timer Details
+      icon: mdi:timer-outline
+      input:
+        timer_input:
+          name: Timer Helper (Input Select)
+          description: The helper containing 8h, 6h, 1h, etc.
+          selector:
+            entity:
+              filter:
+                domain: input_select
+        default_when_turn_on:
+          name: Default Timer Option
+          description: Auto-select this duration when switch is turned on manually.
+          default: "6h"
+          selector:
+            select:
+              mode: dropdown
+              options:
+                - "8h"
+                - "6h"
+                - "4h"
+                - "2h"
+                - "1h"
+                - "30 min"
+                - "15 min"
+                - "5 min"
+
+    extra_options:
+      name: Extra Options
+      icon: mdi:cog
+      collapsed: true
+      input:
+        presence_sensor:
+          name: Presence Sensor (Optional)
+          description: Select the input_boolean that tracks if someone is home. This allows the automation to turns off the switch when no one is at home.
+          default: []
+          selector:
+            entity:
+              filter:
+                domain: input_boolean
+
+# FIXED: Removed the leftover trigger_variables block that caused the error
+mode: single
+
+triggers:
+  # 1. Presence Trigger
+  - trigger: state
+    entity_id: !input presence_sensor
+    to: "off"
+    id: noOneAtHome
+    for:
+      seconds: 5
+
+  # 2. Timer Input Changed
+  - trigger: state
+    entity_id: !input timer_input
+    to:
+      - "8h"
+      - "6h"
+      - "4h"
+      - "2h"
+      - "1h"
+      - "30 min"
+      - "15 min"
+      - "5 min"
+      - "ON"
+    id: timerOn
+
+  # 3. Timer Input to OFF
+  - trigger: state
+    entity_id: !input timer_input
+    to: "OFF"
+    id: timerOff
+
+  # 4. Wall Switch Manually Toggled
+  - trigger: state
+    entity_id: !input wall_switch
+    to: "off"
+    id: fanOff
+  - trigger: state
+    entity_id: !input wall_switch
+    to: "on"
+    id: fanOn
+    for:
+      seconds: 1
+
+conditions: []
+
+actions:
+  # ------------------------------------------------------
+  # LOGIC: Timer Input Changed -> Set Hardware Timer
+  # ------------------------------------------------------
+  - if:
+      - condition: trigger
+        id: timerOn
+    then:
+      # Ensure switch is actually ON
+      - if:
+          - condition: state
+            entity_id: !input wall_switch
+            state: "off"
+        then:
+          - action: switch.turn_on
+            target:
+              entity_id: !input wall_switch
+
+      # Map text to seconds
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: !input timer_input
+                state: "8h"
+            sequence:
+              - action: number.set_value
+                target:
+                  entity_id: !input wall_switch_timer
+                data:
+                  value: 28800
+          - conditions:
+              - condition: state
+                entity_id: !input timer_input
+                state: "6h"
+            sequence:
+              - action: number.set_value
+                target:
+                  entity_id: !input wall_switch_timer
+                data:
+                  value: 21600
+          - conditions:
+              - condition: state
+                entity_id: !input timer_input
+                state: "4h"
+            sequence:
+              - action: number.set_value
+                target:
+                  entity_id: !input wall_switch_timer
+                data:
+                  value: 14400
+          - conditions:
+              - condition: state
+                entity_id: !input timer_input
+                state: "2h"
+            sequence:
+              - action: number.set_value
+                target:
+                  entity_id: !input wall_switch_timer
+                data:
+                  value: 7200
+          - conditions:
+              - condition: state
+                entity_id: !input timer_input
+                state: "1h"
+            sequence:
+              - action: number.set_value
+                target:
+                  entity_id: !input wall_switch_timer
+                data:
+                  value: 3600
+          - conditions:
+              - condition: state
+                entity_id: !input timer_input
+                state: "30 min"
+            sequence:
+              - action: number.set_value
+                target:
+                  entity_id: !input wall_switch_timer
+                data:
+                  value: 1800
+          - conditions:
+              - condition: state
+                entity_id: !input timer_input
+                state: "15 min"
+            sequence:
+              - action: number.set_value
+                target:
+                  entity_id: !input wall_switch_timer
+                data:
+                  value: 900
+          - conditions:
+              - condition: state
+                entity_id: !input timer_input
+                state: "5 min"
+            sequence:
+              - action: number.set_value
+                target:
+                  entity_id: !input wall_switch_timer
+                data:
+                  value: 300
+
+  # ------------------------------------------------------
+  # LOGIC: Switch Manually ON -> Set Default Timer
+  # ------------------------------------------------------
+  - if:
+      - condition: trigger
+        id: fanOn
+    then:
+      - if:
+          - condition: and
+            conditions:
+              - condition: not
+                conditions:
+                  - condition: state
+                    entity_id: !input timer_input
+                    state: "ON"
+              # Only set default if hardware timer is basically 0
+              - condition: numeric_state
+                entity_id: !input wall_switch_timer
+                below: 1
+        then:
+          - action: input_select.select_option
+            target:
+              entity_id: !input timer_input
+            data:
+              option: !input default_when_turn_on
+
+  # ------------------------------------------------------
+  # LOGIC: Timer Input OFF -> Switch OFF
+  # ------------------------------------------------------
+  - if:
+      - condition: trigger
+        id: timerOff
+    then:
+      - if:
+          - condition: state
+            entity_id: !input wall_switch
+            state: "on"
+        then:
+          - action: switch.turn_off
+            target:
+              entity_id: !input wall_switch
+
+  # ------------------------------------------------------
+  # LOGIC: Switch OFF -> Reset Timer Input
+  # ------------------------------------------------------
+  - if:
+      - condition: trigger
+        id: fanOff
+    then:
+      - if:
+          - condition: not
+            conditions:
+              - condition: state
+                entity_id: !input timer_input
+                state: "OFF"
+        then:
+          - action: input_select.select_option
+            target:
+              entity_id: !input timer_input
+            data:
+              option: "OFF"
+
+  # ------------------------------------------------------
+  # LOGIC: Everyone Left -> Turn Switch OFF
+  # ------------------------------------------------------
+  - if:
+      - condition: trigger
+        id: noOneAtHome
+    then:
+      - action: switch.turn_off
+        target:
+          entity_id: !input wall_switch

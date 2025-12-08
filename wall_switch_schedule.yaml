@@ -1,0 +1,112 @@
+blueprint:
+  domain: automation
+  homeassistant:
+    min_version: 2024.12.1
+  author: Guilherme C. Leoni
+  name: Wall Switch Schedule
+
+  input:
+    switch_details:
+      name: Switch Details
+      icon: mdi:toggle-switch
+      input:
+        wall_switch:
+          name: Switch
+          description: The wall switch to control.
+          selector:
+            entity:
+              filter:
+                domain: switch
+
+    schedule_details:
+      name: Schedule Settings
+      icon: mdi:calendar-clock
+      input:
+        target_schedule:
+          name: Schedule Entity
+          description: The schedule helper that determines when the switch should be ON.
+          selector:
+            entity:
+              filter:
+                domain: schedule
+        presence_sensor:
+          name: Presence Sensor
+          description: The input_boolean that tracks if someone is home.
+          default: []
+          selector:
+            entity:
+              filter:
+                domain: input_boolean
+
+# Define variables to allow state checking in templates
+trigger_variables:
+  var_schedule: !input target_schedule
+  var_presence: !input presence_sensor
+
+mode: single
+
+triggers:
+  # ----------------------------------------------------------------
+  # AUTO-START TRIGGERS (Schedule Starts OR User Arrives)
+  # ----------------------------------------------------------------
+  - trigger: state
+    entity_id: !input target_schedule
+    to: "on"
+    id: try_turn_on
+
+  - trigger: state
+    entity_id: !input presence_sensor
+    to: "on"
+    id: try_turn_on
+
+  # ----------------------------------------------------------------
+  # AUTO-STOP TRIGGERS (Schedule Ends OR User Leaves)
+  # ----------------------------------------------------------------
+  - trigger: state
+    entity_id: !input target_schedule
+    to: "off"
+    id: turn_off
+
+  - trigger: state
+    entity_id: !input presence_sensor
+    to: "off"
+    for:
+      seconds: 5
+    id: turn_off
+
+conditions: []
+
+actions:
+  # ------------------------------------------------------
+  # LOGIC: Try to Turn ON
+  # Condition: Schedule MUST be ON -AND- Presence MUST be ON (if defined)
+  # ------------------------------------------------------
+  - if:
+      - condition: trigger
+        id: try_turn_on
+    then:
+      - if:
+          - condition: and
+            conditions:
+              # 1. Schedule is ON
+              - condition: template
+                value_template: "{{ is_state(var_schedule, 'on') }}"
+              # 2. Presence is ON (or optional/undefined)
+              - condition: template
+                value_template: "{{ var_presence == [] or is_state(var_presence, 'on') }}"
+        then:
+          - action: switch.turn_on
+            target:
+              entity_id: !input wall_switch
+
+  # ------------------------------------------------------
+  # LOGIC: Turn OFF
+  # Triggered by Schedule ending OR Presence turning off
+  # ------------------------------------------------------
+  - if:
+      - condition: trigger
+        id: turn_off
+    then:
+      - action: switch.turn_off
+        target:
+          entity_id: !input wall_switch
