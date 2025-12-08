@@ -1,0 +1,151 @@
+blueprint:
+  name: Christmas Color Cycle (Scheduled)
+  description: >
+    Cycles a light through vivid random colors. 
+    Can be automated via a Schedule and Presence Sensor.
+    
+    - If Schedule/Presence are defined: Light turns ON/OFF automatically.
+    - Manual Control: Turning the light ON manually always starts the effect.
+  domain: automation
+  input:
+    target_light:
+      name: Light to Cycle
+      description: Select the light entity (must support color).
+      selector:
+        entity:
+          domain: light
+    
+    change_interval:
+      name: Change Interval (Seconds)
+      description: How many seconds to wait between color changes.
+      default: 1
+      selector:
+        number:
+          min: 0.5
+          max: 60
+          step: 0.5
+          unit_of_measurement: "s"
+          mode: slider
+
+    transition_time:
+      name: Transition Time
+      description: How long it takes to fade to the next color.
+      default: 0.5
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 0.1
+          unit_of_measurement: "s"
+          mode: slider
+
+    automation_options:
+      name: Automation Triggers
+      icon: mdi:calendar-clock
+      collapsed: false
+      input:
+        schedule_entity:
+          name: Schedule Helper (Optional)
+          description: When this schedule is ON, the light will turn ON (if someone is home).
+          default: []
+          selector:
+            entity:
+              domain: schedule
+        presence_sensor:
+          name: Presence Sensor (Optional)
+          description: If defined, the light only turns ON if this sensor is ON.
+          default: []
+          selector:
+            entity:
+              domain: input_boolean
+
+# Map inputs to variables so we can check if they are defined in templates
+trigger_variables:
+  var_schedule: !input schedule_entity
+  var_presence: !input presence_sensor
+
+mode: restart
+max_exceeded: silent
+
+triggers:
+  # 1. The Light itself (Manual or Auto start)
+  - trigger: state
+    entity_id: !input target_light
+    to: "on"
+    id: light_on
+
+  # 2. Schedule triggers
+  - trigger: state
+    entity_id: !input schedule_entity
+    to: "on"
+    id: auto_start
+  - trigger: state
+    entity_id: !input schedule_entity
+    to: "off"
+    id: auto_stop
+
+  # 3. Presence triggers
+  - trigger: state
+    entity_id: !input presence_sensor
+    to: "on"
+    id: auto_start
+  - trigger: state
+    entity_id: !input presence_sensor
+    to: "off"
+    id: auto_stop
+
+action:
+  # ------------------------------------------------------
+  # 1. STOP CONDITIONS (Schedule ended or Left Home)
+  # ------------------------------------------------------
+  - if:
+      - condition: trigger
+        id: auto_stop
+    then:
+      - action: light.turn_off
+        target:
+          entity_id: !input target_light
+      - stop: "Automation stopped by schedule or presence."
+
+  # ------------------------------------------------------
+  # 2. START CONDITIONS (Schedule started or Arrived Home)
+  # ------------------------------------------------------
+  - if:
+      - condition: trigger
+        id: auto_start
+    then:
+      # Check: Is Schedule ON (or undefined)?
+      - if:
+          - condition: template
+            value_template: "{{ var_schedule == [] or is_state(var_schedule, 'on') }}"
+          # Check: Is Presence ON (or undefined)?
+          - condition: template
+            value_template: "{{ var_presence == [] or is_state(var_presence, 'on') }}"
+        then:
+          - action: light.turn_on
+            target:
+              entity_id: !input target_light
+          # The turn_on action above will trigger the 'light_on' trigger,
+          # restarting this automation and entering the loop below.
+      - stop: "Conditions met to start."
+
+  # ------------------------------------------------------
+  # 3. THE EFFECT LOOP (Triggered by Light ON)
+  # ------------------------------------------------------
+  - repeat:
+      while:
+        - condition: state
+          entity_id: !input target_light
+          state: "on"
+      sequence:
+        - action: light.turn_on
+          target:
+            entity_id: !input target_light
+          data:
+            # Random Hue (0-360), 100% Saturation
+            hs_color:
+              - "{{ range(0, 360) | random }}"
+              - 100
+            transition: !input transition_time
+        
+        - delay: !input change_interval
