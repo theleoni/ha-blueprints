@@ -33,11 +33,11 @@ blueprint:
                   - occupancy
                   - presence
 
-    time_configs:
-      name: Time configurations
+    on_off_debounce:
+      name: Debounce Time to Set as "Off"
       input:
-        debounce_off_time:
-          name: Debounce Time to Set as "Off"
+        debounce_off_time_minutes:
+          name: Minutes
           default: 2
           selector:
             number:
@@ -45,7 +45,19 @@ blueprint:
               max: 30
               mode: slider
               unit_of_measurement: minutes
+        debounce_off_time_seconds:
+          name: Seconds
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 59
+              mode: slider
+              unit_of_measurement: seconds
 
+    status_change_debounce:
+      name: Status changes debounce time
+      input:
         short_in:
           name: Short In > Long
           description: Time with someone before it be considered as "Long" occupancy. It will be affected by "Debounce" time.
@@ -105,8 +117,8 @@ triggers:
     id: motionOff
     for:
       hours: 0
-      minutes: !input debounce_off_time
-      seconds: 0
+      minutes: !input debounce_off_time_minutes
+      seconds: !input debounce_off_time_seconds
 
   - trigger: state
     entity_id:
@@ -159,17 +171,17 @@ actions:
                     id:
                       - motionOn
                   - condition: state
-                    entity_id: binary_sensor.hue_motion_sensor_1_motion
+                    entity_id: !input motion_sensor
                     state: "on"
                   - condition: not
                     conditions:
                       - condition: state
-                        entity_id: binary_sensor.hue_motion_sensor_1_motion
+                        entity_id: !input motion_sensor
                         state: "off"
                         for:
                           hours: 0
-                          minutes: !input debounce_off_time
-                          seconds: 0
+                          minutes: !input debounce_off_time_minutes
+                          seconds: !input debounce_off_time_seconds
               - alias: Is not occupied?
                 condition: or
                 conditions:
@@ -211,17 +223,17 @@ actions:
                     id:
                       - motionOn
                   - condition: state
-                    entity_id: binary_sensor.hue_motion_sensor_1_motion
+                    entity_id: !input motion_sensor
                     state: "on"
                   - condition: not
                     conditions:
                       - condition: state
-                        entity_id: binary_sensor.hue_motion_sensor_1_motion
+                        entity_id: !input motion_sensor
                         state: "off"
                         for:
                           hours: 0
-                          minutes: !input debounce_off_time
-                          seconds: 0
+                          minutes: !input debounce_off_time_minutes
+                          seconds: !input debounce_off_time_seconds
               - alias: Is occupied?
                 condition: or
                 conditions:
@@ -258,16 +270,16 @@ actions:
                     id: ""
                     enabled: false
                   - condition: state
-                    entity_id: binary_sensor.hue_motion_sensor_1_motion
+                    entity_id: !input motion_sensor
                     state: "off"
                     for:
                       hours: 0
-                      minutes: !input debounce_off_time
-                      seconds: 0
+                      minutes: !input debounce_off_time_minutes
+                      seconds: !input debounce_off_time_seconds
                   - condition: not
                     conditions:
                       - condition: state
-                        entity_id: binary_sensor.hue_motion_sensor_1_motion
+                        entity_id: !input motion_sensor
                         state: "off"
                         for:
                           hours: 0
