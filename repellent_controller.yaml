@@ -139,7 +139,7 @@ actions:
                 value_template: !input use_with_very_low_refill
               - condition: numeric_state
                 entity_id: !input repellent_refill
-                below: 0.5
+                below: 0.01
         then:
           - if:
               - condition: state
