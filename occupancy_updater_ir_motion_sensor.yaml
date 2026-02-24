@@ -10,6 +10,19 @@ blueprint:
 
   #######              INPUT              #######
   input:
+    mode:
+      name: Default Timer Option
+      # description: Auto-select this duration when switch is turned on manually.
+      default: v1
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - label: "V1: 'Empty' | 'Short In' | 'Long' | 'Short Out'."
+              value: v1
+            - label: "V2: 'Vazio' | 'Passagem' | 'Ocupado' | 'Ocioso'."
+              value: v2
+
     entities_selection:
       name: Entities Selection
       input:
@@ -81,12 +94,13 @@ blueprint:
               unit_of_measurement: minutes
 
 #######         RUNNING CONFIG          #######
-mode: single # single | restart | queued | parallel
-# max: 2
+mode: queued # single | restart | queued | parallel
+max: 2
 # max_exceeded: silent
 
 #######             VARIABLES           #######
-# variables:
+variables:
+  mode_var: !input mode
 
 #######             TRIGGERS            #######
 triggers:
@@ -146,173 +160,344 @@ conditions:
     state: "off"
 
 #######              ACTIONS            #######
+#######              ACTIONS            #######
 actions:
+  # mode
   - choose:
+      # ==========================================================
+      #                            V1
+      # ==========================================================
       - conditions:
-          - condition: state
-            entity_id: input_boolean.issomeoneathome
-            state: "off"
+          - condition: template
+            value_template: "{{ mode_var == 'v1' }}"
         sequence:
-          - action: input_select.select_option
-            metadata: {}
-            data:
-              option: Nobody home
-            target:
-              entity_id: !input occupancy_selector
-            alias: Nobody home
-
-      - conditions:
-          - condition: and
-            conditions:
-              - alias: Has motion?
-                condition: or
-                conditions:
-                  - condition: trigger
-                    id:
-                      - motionOn
+          - choose:
+              - conditions:
                   - condition: state
-                    entity_id: !input motion_sensor
-                    state: "on"
-                  - condition: not
-                    conditions:
-                      - condition: state
-                        entity_id: !input motion_sensor
-                        state: "off"
-                        for:
-                          hours: 0
-                          minutes: !input debounce_off_time_minutes
-                          seconds: !input debounce_off_time_seconds
-              - alias: Is not occupied?
-                condition: or
-                conditions:
-                  - condition: state
-                    entity_id: !input occupancy_selector
-                    state: Nobody home
-                  - condition: state
-                    entity_id: !input occupancy_selector
-                    state: Empty
-                  - condition: state
-                    entity_id: !input occupancy_selector
-                    state: Short In
-              - condition: not
-                conditions:
-                  - condition: state
-                    entity_id: !input occupancy_selector
-                    state: Short In
-                    for:
-                      hours: 0
-                      minutes: !input short_in
-                      seconds: 0
-        sequence:
-          - alias: Short In
-            action: input_select.select_option
-            metadata: {}
-            data:
-              option: Short In
-            target:
-              entity_id: !input occupancy_selector
-        alias: Short In
-
-      - conditions:
-          - condition: and
-            conditions:
-              - alias: Has motion?
-                condition: or
-                conditions:
-                  - condition: trigger
-                    id:
-                      - motionOn
-                  - condition: state
-                    entity_id: !input motion_sensor
-                    state: "on"
-                  - condition: not
-                    conditions:
-                      - condition: state
-                        entity_id: !input motion_sensor
-                        state: "off"
-                        for:
-                          hours: 0
-                          minutes: !input debounce_off_time_minutes
-                          seconds: !input debounce_off_time_seconds
-              - alias: Is occupied?
-                condition: or
-                conditions:
-                  - condition: state
-                    entity_id: !input occupancy_selector
-                    state: Short In
-                    for:
-                      hours: 0
-                      minutes: !input short_in
-                      seconds: 0
-                  - condition: state
-                    entity_id: !input occupancy_selector
-                    state: Long
-                  - condition: state
-                    entity_id: !input occupancy_selector
-                    state: Short Out
-        sequence:
-          - alias: Long
-            action: input_select.select_option
-            metadata: {}
-            data:
-              option: Long
-            target:
-              entity_id: !input occupancy_selector
-        alias: Long
-
-      - conditions:
-          - condition: and
-            conditions:
-              - alias: Has motion?
-                condition: or
-                conditions:
-                  - condition: trigger
-                    id: ""
-                    enabled: false
-                  - condition: state
-                    entity_id: !input motion_sensor
+                    entity_id: input_boolean.issomeoneathome
                     state: "off"
-                    for:
-                      hours: 0
-                      minutes: !input debounce_off_time_minutes
-                      seconds: !input debounce_off_time_seconds
-                  - condition: not
-                    conditions:
-                      - condition: state
-                        entity_id: !input motion_sensor
-                        state: "off"
-                        for:
-                          hours: 0
-                          minutes: !input short_out
-                          seconds: 0
-              - alias: Is occupied?
-                condition: or
-                conditions:
-                  - condition: state
-                    entity_id: !input occupancy_selector
-                    state: Long
-                  - condition: state
-                    entity_id: !input occupancy_selector
-                    state: Short Out
-                    for:
-                      hours: 0
-                      minutes: !input short_out
-                      seconds: 0
-        sequence:
-          - alias: Short Out
-            action: input_select.select_option
-            metadata: {}
-            data:
-              option: Short Out
-            target:
-              entity_id: !input occupancy_selector
-        alias: Short Out
+                sequence:
+                  - action: input_select.select_option
+                    metadata: {}
+                    data:
+                      option: Nobody home
+                    target:
+                      entity_id: !input occupancy_selector
+                    alias: Nobody home
 
-    default:
-      - action: input_select.select_option
-        metadata: {}
-        data:
-          option: Empty
-        target:
-          entity_id: !input occupancy_selector
-        alias: Empty
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - alias: Has motion?
+                        condition: or
+                        conditions:
+                          - condition: trigger
+                            id:
+                              - motionOn
+                          - condition: state
+                            entity_id: !input motion_sensor
+                            state: "on"
+                          - condition: not
+                            conditions:
+                              - condition: state
+                                entity_id: !input motion_sensor
+                                state: "off"
+                                for:
+                                  hours: 0
+                                  minutes: !input debounce_off_time_minutes
+                                  seconds: !input debounce_off_time_seconds
+                      - alias: Is not occupied?
+                        condition: or
+                        conditions:
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Nobody home
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Empty
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Short In
+                      - condition: not
+                        conditions:
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Short In
+                            for:
+                              hours: 0
+                              minutes: !input short_in
+                              seconds: 0
+                sequence:
+                  - alias: Short In
+                    action: input_select.select_option
+                    metadata: {}
+                    data:
+                      option: Short In
+                    target:
+                      entity_id: !input occupancy_selector
+                alias: Short In
+
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - alias: Has motion?
+                        condition: or
+                        conditions:
+                          - condition: trigger
+                            id:
+                              - motionOn
+                          - condition: state
+                            entity_id: !input motion_sensor
+                            state: "on"
+                          - condition: not
+                            conditions:
+                              - condition: state
+                                entity_id: !input motion_sensor
+                                state: "off"
+                                for:
+                                  hours: 0
+                                  minutes: !input debounce_off_time_minutes
+                                  seconds: !input debounce_off_time_seconds
+                      - alias: Is occupied?
+                        condition: or
+                        conditions:
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Short In
+                            for:
+                              hours: 0
+                              minutes: !input short_in
+                              seconds: 0
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Long
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Short Out
+                sequence:
+                  - alias: Long
+                    action: input_select.select_option
+                    metadata: {}
+                    data:
+                      option: Long
+                    target:
+                      entity_id: !input occupancy_selector
+                alias: Long
+
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - alias: Has motion?
+                        condition: or
+                        conditions:
+                          - condition: trigger
+                            id: ""
+                            enabled: false
+                          - condition: state
+                            entity_id: !input motion_sensor
+                            state: "off"
+                            for:
+                              hours: 0
+                              minutes: !input debounce_off_time_minutes
+                              seconds: !input debounce_off_time_seconds
+                          - condition: not
+                            conditions:
+                              - condition: state
+                                entity_id: !input motion_sensor
+                                state: "off"
+                                for:
+                                  hours: 0
+                                  minutes: !input short_out
+                                  seconds: 0
+                      - alias: Is occupied?
+                        condition: or
+                        conditions:
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Long
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Short Out
+                            for:
+                              hours: 0
+                              minutes: !input short_out
+                              seconds: 0
+                sequence:
+                  - alias: Short Out
+                    action: input_select.select_option
+                    metadata: {}
+                    data:
+                      option: Short Out
+                    target:
+                      entity_id: !input occupancy_selector
+                alias: Short Out
+
+            default:
+              - action: input_select.select_option
+                metadata: {}
+                data:
+                  option: Empty
+                target:
+                  entity_id: !input occupancy_selector
+                alias: Empty
+
+      # ==========================================================
+      #                            V2
+      # ==========================================================
+      - conditions:
+          - condition: template
+            value_template: "{{ mode_var == 'v2' }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - alias: Has motion?
+                        condition: or
+                        conditions:
+                          - condition: trigger
+                            id:
+                              - motionOn
+                          - condition: state
+                            entity_id: !input motion_sensor
+                            state: "on"
+                          - condition: not
+                            conditions:
+                              - condition: state
+                                entity_id: !input motion_sensor
+                                state: "off"
+                                for:
+                                  hours: 0
+                                  minutes: !input debounce_off_time_minutes
+                                  seconds: !input debounce_off_time_seconds
+                      - alias: Is not occupied?
+                        condition: or
+                        conditions:
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Vazio
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Passagem
+                      - condition: not
+                        conditions:
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Passagem
+                            for:
+                              hours: 0
+                              minutes: !input short_in
+                              seconds: 0
+                sequence:
+                  - alias: Passagem
+                    action: input_select.select_option
+                    metadata: {}
+                    data:
+                      option: Passagem
+                    target:
+                      entity_id: !input occupancy_selector
+                alias: Passagem
+
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - alias: Has motion?
+                        condition: or
+                        conditions:
+                          - condition: trigger
+                            id:
+                              - motionOn
+                          - condition: state
+                            entity_id: !input motion_sensor
+                            state: "on"
+                          - condition: not
+                            conditions:
+                              - condition: state
+                                entity_id: !input motion_sensor
+                                state: "off"
+                                for:
+                                  hours: 0
+                                  minutes: !input debounce_off_time_minutes
+                                  seconds: !input debounce_off_time_seconds
+                      - alias: Is occupied?
+                        condition: or
+                        conditions:
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Passagem
+                            for:
+                              hours: 0
+                              minutes: !input short_in
+                              seconds: 0
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Ocupado
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Ocioso
+                sequence:
+                  - alias: Ocupado
+                    action: input_select.select_option
+                    metadata: {}
+                    data:
+                      option: Ocupado
+                    target:
+                      entity_id: !input occupancy_selector
+                alias: Ocupado
+
+              - conditions:
+                  - condition: and
+                    conditions:
+                      - alias: Has motion?
+                        condition: or
+                        conditions:
+                          - condition: trigger
+                            id: ""
+                            enabled: false
+                          - condition: state
+                            entity_id: !input motion_sensor
+                            state: "off"
+                            for:
+                              hours: 0
+                              minutes: !input debounce_off_time_minutes
+                              seconds: !input debounce_off_time_seconds
+                          - condition: not
+                            conditions:
+                              - condition: state
+                                entity_id: !input motion_sensor
+                                state: "off"
+                                for:
+                                  hours: 0
+                                  minutes: !input short_out
+                                  seconds: 0
+                      - alias: Is occupied?
+                        condition: or
+                        conditions:
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Ocupado
+                          - condition: state
+                            entity_id: !input occupancy_selector
+                            state: Ocioso
+                            for:
+                              hours: 0
+                              minutes: !input short_out
+                              seconds: 0
+                sequence:
+                  - alias: Ocioso
+                    action: input_select.select_option
+                    metadata: {}
+                    data:
+                      option: Ocioso
+                    target:
+                      entity_id: !input occupancy_selector
+                alias: Ocioso
+
+            default:
+              - action: input_select.select_option
+                metadata: {}
+                data:
+                  option: Vazio
+                target:
+                  entity_id: !input occupancy_selector
+                alias: Vazio
