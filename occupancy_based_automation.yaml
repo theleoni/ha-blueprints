@@ -1,0 +1,275 @@
+blueprint:
+  domain: automation
+  homeassistant:
+    min_version: 2025.7.0
+  author: Guilherme C. Leoni (https://github.com/theleoni)
+  source_url: https://www.github.com/theleoni/ha-blueprints
+
+  name: Automation based in Occupancy
+  # description:
+
+  #######              INPUT              #######
+  input:
+    base:
+      name: Occupancy
+      input:
+        occupancy_selector:
+          name: Occupancy Seletor
+          description: "Possible States: Vazio | Passagem | Ocioso | Ocupado; Optional ones: Pet | Não perturbe;"
+          selector:
+            entity:
+              filter:
+                domain: input_select
+        occupancy_selector_debounce:
+          name: Occupancy Seletor Debounce
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 30
+              mode: slider
+              unit_of_measurement: s
+
+    additional_data:
+      name: Additional Trigger and Conditions
+      input:
+        additional_triggers:
+          name: Additional triggers to call this validations
+          default: []
+          selector:
+            trigger: {}
+        additional_condition:
+          name: Additional Conditions
+          default: []
+          selector:
+            condition: {}
+
+    state_actions:
+      name: Actions
+      input:
+        default_action:
+          name: Ação padrão (condição base não atendida ou não foi possível encontrar essa opção)
+          selector:
+            action: {}
+        base_action_empty:
+          name: Ações quando "Vazio"
+          default: []
+          selector:
+            action: {}
+        base_action_short_in:
+          name: Ações quando "Passagem"
+          default: []
+          selector:
+            action: {}
+        base_action_long:
+          name: Ações quando "Ocupado"
+          default: []
+          selector:
+            action: {}
+        base_action_short_out:
+          name: Ações quando "Ocioso"
+          default: []
+          selector:
+            action: {}
+
+        base_action_pet:
+          name: Ações quando "Pet"
+          default: []
+          selector:
+            action: {}
+        base_action_ignore:
+          name: Ações quando "Não perturbe"
+          default: []
+          selector:
+            action: {}
+
+#######         RUNNING CONFIG          #######
+mode: queued # single | restart | queued | parallel
+# max: 2
+# max_exceeded: silent
+
+#######             VARIABLES           #######
+variables:
+  now_id: "{{ now().strftime('%H%M%S') }}"
+  occupancy_selector_var: !input occupancy_selector
+
+  base_action_empty_var: !input base_action_empty
+  actions_empty: >
+    {% if base_action_empty_var is mapping %}
+      {{ [base_action_empty_var] }}
+    {% elif base_action_empty_var is iterable and base_action_empty_var is not string %}
+      {{ base_action_empty_var }}
+    {% else %}
+      []
+    {% endif %}
+
+  base_action_short_in_var: !input base_action_short_in
+  actions_short_in: >
+    {% if base_action_short_in_var is mapping %}
+      {{ [base_action_short_in_var] }}
+    {% elif base_action_short_in_var is iterable and base_action_short_in_var is not string %}
+      {{ base_action_short_in_var }}
+    {% else %}
+      []
+    {% endif %}
+
+  base_action_long_var: !input base_action_long
+  actions_long: >
+    {% if base_action_long_var is mapping %}
+      {{ [base_action_long_var] }}
+    {% elif base_action_long_var is iterable and base_action_long_var is not string %}
+      {{ base_action_long_var }}
+    {% else %}
+      []
+    {% endif %}
+
+  base_action_short_out_var: !input base_action_short_out
+  actions_short_out: >
+    {% if base_action_short_out_var is mapping %}
+      {{ [base_action_short_out_var] }}
+    {% elif base_action_short_out_var is iterable and base_action_short_out_var is not string %}
+      {{ base_action_short_out_var }}
+    {% else %}
+      []
+    {% endif %}
+
+  base_action_pet_var: !input base_action_pet
+  actions_pet: >
+    {% if base_action_pet_var is mapping %}
+      {{ [base_action_pet_var] }}
+    {% elif base_action_pet_var is iterable and base_action_pet_var is not string %}
+      {{ base_action_pet_var }}
+    {% else %}
+      []
+    {% endif %}
+
+  base_action_ignore_var: !input base_action_ignore
+  actions_ignore: >
+    {% if base_action_ignore_var is mapping %}
+      {{ [base_action_ignore_var] }}
+    {% elif base_action_ignore_var is iterable and base_action_ignore_var is not string %}
+      {{ base_action_ignore_var }}
+    {% else %}
+      []
+    {% endif %}
+
+#######             TRIGGERS            #######
+triggers:
+  - triggers: !input additional_triggers
+  - trigger: state
+    entity_id: input_boolean.runallautomation
+
+  - trigger: state
+    entity_id: !input occupancy_selector
+    for:
+      hours: 0
+      minutes: 0
+      seconds: !input occupancy_selector_debounce
+
+#######            CONDITIONS           #######
+conditions:
+  - condition: state
+    entity_id: input_boolean.stopallautomation
+    state: "off"
+
+#######              ACTIONS            #######
+actions:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: !input occupancy_selector
+            state: "Vazio"
+        sequence:
+          - if:
+              - condition: and
+                conditions: !input additional_condition
+            then:
+              - choose:
+                  - conditions: "{{ actions_empty | length > 0 }}"
+                    sequence: !input base_action_empty
+            else:
+              - sequence: !input default_action
+
+      - conditions:
+          - condition: state
+            entity_id: !input occupancy_selector
+            state: "Passagem"
+        sequence:
+          - if:
+              - condition: and
+                conditions: !input additional_condition
+            then:
+              - choose:
+                  - conditions: "{{ actions_short_in | length > 0 }}"
+                    sequence: !input base_action_short_in
+            else:
+              - sequence: !input default_action
+
+      - conditions:
+          - condition: state
+            entity_id: !input occupancy_selector
+            state: "Ocupado"
+        sequence:
+          - if:
+              - condition: and
+                conditions: !input additional_condition
+            then:
+              - choose:
+                  - conditions: "{{ actions_long | length > 0 }}"
+                    sequence: !input base_action_long
+            else:
+              - sequence: !input default_action
+
+      - conditions:
+          - condition: state
+            entity_id: !input occupancy_selector
+            state: "Ocioso"
+        sequence:
+          - if:
+              - condition: and
+                conditions: !input additional_condition
+            then:
+              - choose:
+                  - conditions: "{{ actions_short_out | length > 0 }}"
+                    sequence: !input base_action_short_out
+            else:
+              - sequence: !input default_action
+
+      - conditions:
+          - condition: state
+            entity_id: !input occupancy_selector
+            state: "Pet"
+        sequence:
+          - if:
+              - condition: and
+                conditions: !input additional_condition
+            then:
+              - choose:
+                  - conditions: "{{ actions_pet | length > 0 }}"
+                    sequence: !input base_action_pet
+            else:
+              - sequence: !input default_action
+
+      - conditions:
+          - condition: state
+            entity_id: !input occupancy_selector
+            state: "Não perturbe"
+        sequence:
+          - if:
+              - condition: and
+                conditions: !input additional_condition
+            then:
+              - choose:
+                  - conditions: "{{ actions_ignore | length > 0 }}"
+                    sequence: !input base_action_ignore
+            else:
+              - sequence: !input default_action
+
+    default:
+      - sequence: !input default_action
+      # - action: script.send_message
+      #   metadata: {}
+      #   data:
+      #     title: "Not able to handle Occupancy Selector"
+      #     message: "State '{{ states(occupancy_selector_var) }}' not found in automation {{ this.attributes.friendly_name }}."
+      #     id: "notification_occupancy_based_{{ now_id }}"
