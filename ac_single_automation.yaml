@@ -1,0 +1,194 @@
+blueprint:
+  name: "Controle Avançado de AC - Presença e Pets (Final)"
+  description: "Gerencia AC baseado em ocupação, com seções individuais para cada modo e suporte a Pets."
+  domain: automation
+  homeassistant:
+    min_version: 2024.12.1
+
+  input:
+    mode:
+      name: Occupancy Mode
+      # description: Auto-select this duration when switch is turned on manually.
+      default: v1
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - label: "V1: 'Empty' | 'Short In' | 'Long' | 'Short Out'."
+              value: v1
+            - label: "V2: 'Vazio' | 'Passagem' | 'Ocupado' | 'Ocioso'."
+              value: v2
+
+    # --- ENTIDADES ---
+    ac_device:
+      name: Ar Condicionado
+      selector:
+        entity:
+          domain: climate
+    presence_home:
+      name: Alguém em Casa? (Boolean)
+      selector:
+        entity:
+          domain: input_boolean
+    room_presence:
+      name: Estado de Presença do Cômodo (Select)
+      description: "Opções: Pet, Empty, Short In, Long, Short Out"
+      selector:
+        entity:
+          domain: input_select
+    is_daylight:
+      name: É dia? (Boolean)
+      selector:
+        entity:
+          domain: input_boolean
+
+    # --- MODO COOL ---
+    cool_settings:
+      name: "Modo: Cool (Frio)"
+      icon: mdi:snowflake
+      input:
+        cool_action:
+          name: Ação
+          default: []
+          selector: { action: {} }
+        cool_delay:
+          name: Delay (0-60s)
+          default: 5
+          selector: { number: { min: 0, max: 60, unit_of_measurement: s } }
+
+    # --- MODO FAN ---
+    fan_settings:
+      name: "Modo: Fan (Ventilação)"
+      icon: mdi:fan
+      input:
+        fan_action:
+          name: Ação
+          default: []
+          selector: { action: {} }
+        fan_delay:
+          name: Delay (0-60s)
+          default: 5
+          selector: { number: { min: 0, max: 60, unit_of_measurement: s } }
+
+    # --- MODO DRY ---
+    dry_settings:
+      name: "Modo: Dry (Secar)"
+      icon: mdi:water-percent
+      input:
+        dry_action:
+          name: Ação
+          default: []
+          selector: { action: {} }
+        dry_delay:
+          name: Delay (0-60s)
+          default: 5
+          selector: { number: { min: 0, max: 60, unit_of_measurement: s } }
+
+    # --- MODO HEAT ---
+    heat_settings:
+      name: "Modo: Heat (Quente)"
+      icon: mdi:fire
+      input:
+        heat_action:
+          name: Ação
+          default: []
+          selector: { action: {} }
+        heat_delay:
+          name: Delay (0-60s)
+          default: 5
+          selector: { number: { min: 0, max: 60, unit_of_measurement: s } }
+
+    # --- GESTÃO DE AUSÊNCIA ---
+    absence_settings:
+      name: Configurações de Presença e Saída
+      icon: mdi:account-off
+      input:
+        long_presence_action:
+          name: Ação para 'Long' Occupancy
+          default: []
+          selector: { action: {} }
+        day_delay:
+          name: Delay p/ desligar (Dia)
+          default: 30
+          selector: { number: { min: 0, max: 240, unit_of_measurement: min } }
+        night_delay:
+          name: Delay p/ desligar (Noite)
+          default: 0
+          selector: { number: { min: 0, max: 240, unit_of_measurement: min } }
+
+mode: restart
+
+variables:
+  ac_ent: !input ac_device
+  # Mapeando inputs para variáveis para uso seguro em templates
+  c_d: !input cool_delay
+  f_d: !input fan_delay
+  d_d: !input dry_delay
+  h_d: !input heat_delay
+  day_d: !input day_delay
+  night_d: !input night_delay
+
+trigger:
+  - platform: state
+    entity_id: !input ac_device
+  - platform: state
+    entity_id: !input room_presence
+  - platform: state
+    entity_id: !input presence_home
+
+action:
+  - variables:
+      ac_state: "{{ states(ac_ent) }}"
+      is_home: "{{ is_state(presence_home, 'on') }}"
+      room_state: "{{ states(room_presence) }}"
+      is_day: "{{ is_state(is_daylight, 'on') }}"
+
+  - choose:
+      # --- CENÁRIO 1: ALGUÉM EM CASA ---
+      - conditions:
+          - condition: template
+            value_template: "{{ is_home }}"
+        sequence:
+          - choose:
+              # Gatilho: O AC mudou de estado
+              - conditions: "{{ trigger.platform == 'state' and trigger.entity_id == ac_ent }}"
+                sequence:
+                  - delay:
+                      seconds: >
+                        {% if ac_state == 'cool' %} {{ c_d | float }}
+                        {% elif ac_state == 'fan_only' %} {{ f_d | float }}
+                        {% elif ac_state == 'dry' %} {{ d_d | float }}
+                        {% elif ac_state == 'heat' %} {{ h_d | float }}
+                        {% else %} 0 {% endif %}
+                  - choose:
+                      - conditions: "{{ ac_state == 'cool' }}"
+                        sequence: !input cool_action
+                      - conditions: "{{ ac_state == 'fan_only' }}"
+                        sequence: !input fan_action
+                      - conditions: "{{ ac_state == 'dry' }}"
+                        sequence: !input dry_action
+                      - conditions: "{{ ac_state == 'heat' }}"
+                        sequence: !input heat_action
+
+              # Gatilho: A presença no cômodo mudou
+              - conditions: "{{ trigger.platform == 'state' and trigger.entity_id == room_presence }}"
+                sequence:
+                  - choose:
+                      - conditions: "{{ room_state == 'Long' }}"
+                        sequence: !input long_presence_action
+                      - conditions: "{{ room_state == 'Empty' }}"
+                        sequence:
+                          - action: climate.turn_off
+                            target: { entity_id: !input ac_device }
+
+      # --- CENÁRIO 2: CASA VAZIA ---
+      - conditions:
+          - condition: template
+            value_template: "{{ not is_home }}"
+        sequence:
+          - choose:
+              # Se for Pet, não faz nada
+              - conditions: "{{ room_state == 'Pet' }}"
+                sequence: []
+              
+              # Se estiver vazio ou ninguém em casa, desliga com delay

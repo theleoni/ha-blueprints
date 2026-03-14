@@ -9,6 +9,38 @@ blueprint:
   description: Turns ON or OFF the switches that control a repellent and checks if the refill is not empty.
 
   input:
+    mode:
+      name: Occupancy Mode
+      # description: Auto-select this duration when switch is turned on manually.
+      default: v1
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - label: "V1: 'Empty' | 'Short In' | 'Long' | 'Short Out'."
+              value: v1
+            - label: "V2: 'Vazio' | 'Passagem' | 'Ocupado' | 'Ocioso'."
+              value: v2
+    jujuba:
+      name: Limite mínimo do líquido repelente
+      input:
+        should_stop_if_below_threshold:
+          name: Ligar apenas se tiver líquido repelente?
+          description: Quando "Desligado", ignora a quantidade atual de líquido repelente
+          default: true
+          selector:
+            boolean:
+        threshold_to_allow_turn_on:
+          name: Limite mínimo de líquido repelente
+          default: 0.01
+          selector:
+            number:
+              min: 0.00
+              max: 32.20
+              mode: box
+              step: 0.01
+              unit_of_measurement: ml
+
     room_name:
       name: Room Name
       selector:
@@ -53,13 +85,16 @@ blueprint:
           selector:
             boolean:
 
+#######         RUNNING CONFIG          #######
 mode: queued # single | restart | queued | parallel
 max: 2
 max_exceeded: silent
 
-# variables:
-#   boolean_low_refil: !input use_with_very_low_refill
+#######             VARIABLES           #######
+variables:
+  mode_var: !input mode
 
+#######             TRIGGERS            #######
 triggers:
   - trigger: state
     entity_id:
@@ -68,23 +103,7 @@ triggers:
   - trigger: state
     entity_id:
       - !input occupancy_select
-    to: Empty
-    id: occupancyOff
-  - trigger: state
-    entity_id:
-      - !input occupancy_select
-    id: occupancyOn
-    from: Empty
-  - trigger: state
-    entity_id:
-      - !input occupancy_select
-    to: Short In
-    id: occupancyOff
-  - trigger: state
-    entity_id:
-      - !input occupancy_select
-    id: occupancyOn
-    from: Short In
+    id: occupancyChanged
   - trigger: state
     entity_id: input_boolean.issomeoneathome
     to: "off"
@@ -120,184 +139,134 @@ triggers:
       seconds: 0
     id: onForTooLong
 
+#######            CONDITIONS           #######
 conditions:
   - condition: state
     entity_id: input_boolean.stopallautomation
     state: "off"
 
+#######              ACTIONS            #######
 actions:
-  - alias: Check Refill
-    if:
-      - condition: trigger
-        id:
-          - dispositivoLigado
-    then:
-      - if:
-          - condition: and
-            conditions:
-              - condition: template
-                value_template: !input use_with_very_low_refill
-              - condition: numeric_state
-                entity_id: !input repellent_refill
-                below: 0.01
-        then:
-          - if:
-              - condition: state
-                entity_id: !input repellent_switch
-                state: "on"
-            then:
-              - action: switch.turn_off
-                metadata: {}
-                data: {}
-                target:
-                  entity_id: !input repellent_switch
-          - stop: (Sem refil repelente) Nada mais a fazer
-        else:
-          - stop: (Dispositivo ligado) Nada mais a fazer
-
-  - alias: Bug Control
-    choose:
+  # mode
+  - choose:
+      # ==========================================================
+      #                            V1
+      # ==========================================================
       - conditions:
-          - condition: or
-            conditions:
-              - condition: or
+          - condition: template
+            value_template: "{{ mode_var == 'v1' }}"
+        sequence:
+          - alias: Check Refill
+            if:
+              - condition: and
                 conditions:
-                  - condition: state
-                    entity_id: input_select.bug_willing
-                    state: Unlikely 0
-                  - condition: state
-                    entity_id: input_select.bug_willing
-                    state: Disabled
-              - condition: state
-                entity_id: !input repellent_switch
-                state: "on"
-                for:
-                  hours: 10
-                  minutes: 0
-                  seconds: 0
-        sequence:
-          - if:
-              - condition: state
-                entity_id: !input repellent_switch
-                state: "on"
-            then:
-              - action: switch.turn_off
-                metadata: {}
-                data: {}
-                target:
-                  entity_id: !input repellent_switch
-
-      - conditions:
-          - condition: state
-            entity_id: !input occupancy_select
-            state: Pet
-        sequence:
-          # DESLIGAR (se ligado)
-          - if:
-              - condition: state
-                entity_id: !input repellent_switch
-                state: "on"
-            then:
-              - action: switch.turn_off
-                metadata: {}
-                data: {}
-                target:
-                  entity_id: !input repellent_switch
-
-            else:
-              # LIGAR (se desligado)
-              - if:
-                  - condition: state
-                    entity_id: !input repellent_switch
-                    state: "off"
-                then:
-                  - action: switch.turn_on
-                    metadata: {}
-                    data: {}
-                    target:
-                      entity_id: !input repellent_switch
-
-      - conditions:
-          - condition: state
-            entity_id: input_boolean.issomeoneathome
-            state: "off"
-        sequence:
-          # DESLIGAR (se ligado)
-          - if:
-              - condition: state
-                entity_id: !input repellent_switch
-                state: "on"
-            then:
-              - action: switch.turn_off
-                metadata: {}
-                data: {}
-                target:
-                  entity_id: !input repellent_switch
-
-      - conditions:
-          - condition: or
-            conditions:
-              - condition: state
-                entity_id: input_select.bug_willing
-                state: Likely +1
-              - condition: state
-                entity_id: input_select.bug_willing
-                state: SEVERE
-
-        sequence:
-          - if:
-              - condition: or
-                conditions:
-                  - condition: state
-                    entity_id: !input occupancy_select
-                    state: Empty
-                  - condition: state
-                    entity_id: !input occupancy_select
-                    state: Short In
+                  - condition: template
+                    value_template: !input should_stop_if_below_threshold
+                  - condition: trigger
+                    id:
+                      - dispositivoLigado
             then:
               - if:
-                  - condition: state
-                    entity_id: !input repellent_switch
-                    state: "on"
-                then:
-                  - action: switch.turn_off
-                    metadata: {}
-                    data: {}
-                    target:
-                      entity_id: !input repellent_switch
-            else:
-              - if:
-                  - condition: state
-                    entity_id: !input repellent_switch
-                    state: "off"
-                then:
-                  - action: switch.turn_on
-                    metadata: {}
-                    data: {}
-                    target:
-                      entity_id: !input repellent_switch
-
-      - conditions:
-          - condition: state
-            entity_id: input_select.bug_willing
-            state: Very Likely +2
-
-        sequence:
-          - if:
-              - condition: or
-                conditions:
-                  - condition: not
-                    conditions:
-                      - condition: or
-                        conditions:
-                          - condition: state
-                            entity_id: !input occupancy_select
-                            state: Empty
-                          - condition: state
-                            entity_id: !input occupancy_select
-                            state: Short In
                   - condition: and
                     conditions:
+                      - condition: template
+                        value_template: !input use_with_very_low_refill
+                      - condition: numeric_state
+                        entity_id: !input repellent_refill
+                        below: !input threshold_to_allow_turn_on
+                then:
+                  - if:
+                      - condition: state
+                        entity_id: !input repellent_switch
+                        state: "on"
+                    then:
+                      - action: switch.turn_off
+                        metadata: {}
+                        data: {}
+                        target:
+                          entity_id: !input repellent_switch
+                  - stop: (Sem refil repelente) Nada mais a fazer
+                else:
+                  - stop: (Dispositivo ligado) Nada mais a fazer
+
+          - alias: Bug Control
+            choose:
+              - conditions:
+                  - condition: or
+                    conditions:
+                      - condition: or
+                        conditions:
+                          - condition: state
+                            entity_id: input_select.bug_willing
+                            state: Unlikely 0
+                          - condition: state
+                            entity_id: input_select.bug_willing
+                            state: Disabled
+                      - condition: state
+                        entity_id: !input repellent_switch
+                        state: "on"
+                        for:
+                          hours: 10
+                          minutes: 0
+                          seconds: 0
+                sequence:
+                  - if:
+                      - condition: state
+                        entity_id: !input repellent_switch
+                        state: "on"
+                    then:
+                      - action: switch.turn_off
+                        metadata: {}
+                        data: {}
+                        target:
+                          entity_id: !input repellent_switch
+
+              - conditions:
+                  - condition: state
+                    entity_id: !input occupancy_select
+                    state: Pet
+                sequence:
+                  # DESLIGAR (se ligado)
+                  - if:
+                      - condition: state
+                        entity_id: !input repellent_switch
+                        state: "on"
+                    then:
+                      - action: switch.turn_off
+                        metadata: {}
+                        data: {}
+                        target:
+                          entity_id: !input repellent_switch
+
+              - conditions:
+                  - condition: state
+                    entity_id: input_boolean.issomeoneathome
+                    state: "off"
+                sequence:
+                  # DESLIGAR (se ligado)
+                  - if:
+                      - condition: state
+                        entity_id: !input repellent_switch
+                        state: "on"
+                    then:
+                      - action: switch.turn_off
+                        metadata: {}
+                        data: {}
+                        target:
+                          entity_id: !input repellent_switch
+
+              - conditions:
+                  - condition: or
+                    conditions:
+                      - condition: state
+                        entity_id: input_select.bug_willing
+                        state: Likely +1
+                      - condition: state
+                        entity_id: input_select.bug_willing
+                        state: SEVERE
+
+                sequence:
+                  - if:
                       - condition: or
                         conditions:
                           - condition: state
@@ -306,27 +275,240 @@ actions:
                           - condition: state
                             entity_id: !input occupancy_select
                             state: Short In
-                      - condition: template
-                        value_template: !input should_turn_on_even_without_occupancy
+                    then:
+                      - if:
+                          - condition: state
+                            entity_id: !input repellent_switch
+                            state: "on"
+                        then:
+                          - action: switch.turn_off
+                            metadata: {}
+                            data: {}
+                            target:
+                              entity_id: !input repellent_switch
+
+              - conditions:
+                  - condition: state
+                    entity_id: input_select.bug_willing
+                    state: Very Likely +2
+
+                sequence:
+                  - if:
+                      - condition: not
+                        conditions:
+                          - condition: or
+                            conditions:
+                              - condition: state
+                                entity_id: input_boolean.issomeoneathome
+                                state: "on"
+                              - condition: state
+                                entity_id: !input occupancy_select
+                                state: Empty
+                              - condition: template
+                                value_template: !input should_turn_on_even_without_occupancy
+                    then:
+                      - if:
+                          - condition: state
+                            entity_id: !input repellent_switch
+                            state: "off"
+                        then:
+                          - action: switch.turn_on
+                            metadata: {}
+                            data: {}
+                            target:
+                              entity_id: !input repellent_switch
+                    else:
+                      - if:
+                          - condition: state
+                            entity_id: !input repellent_switch
+                            state: "on"
+                        then:
+                          - action: switch.turn_off
+                            metadata: {}
+                            data: {}
+                            target:
+                              entity_id: !input repellent_switch
+
+      # ==========================================================
+      #                            V2
+      # ==========================================================
+      - conditions:
+          - condition: template
+            value_template: "{{ mode_var == 'v2' }}"
+        sequence:
+          - alias: Check Refill
+            if:
+              - condition: and
+                conditions:
+                  - condition: template
+                    value_template: !input should_stop_if_below_threshold
+                  - condition: trigger
+                    id:
+                      - dispositivoLigado
             then:
               - if:
-                  - condition: state
-                    entity_id: !input repellent_switch
-                    state: "off"
+                  - condition: and
+                    conditions:
+                      - condition: template
+                        value_template: !input use_with_very_low_refill
+                      - condition: numeric_state
+                        entity_id: !input repellent_refill
+                        below: !input threshold_to_allow_turn_on
                 then:
-                  - action: switch.turn_on
-                    metadata: {}
-                    data: {}
-                    target:
-                      entity_id: !input repellent_switch
-            else:
-              - if:
+                  - if:
+                      - condition: state
+                        entity_id: !input repellent_switch
+                        state: "on"
+                    then:
+                      - action: switch.turn_off
+                        metadata: {}
+                        data: {}
+                        target:
+                          entity_id: !input repellent_switch
+                  - stop: (Sem refil repelente) Nada mais a fazer
+                else:
+                  - stop: (Dispositivo ligado) Nada mais a fazer
+
+          - alias: Bug Control
+            choose:
+              - conditions:
+                  - condition: or
+                    conditions:
+                      - condition: state
+                        entity_id: input_select.bug_willing
+                        state: Unlikely 0
+                      - condition: state
+                        entity_id: input_select.bug_willing
+                        state: Disabled
+                      - condition: state
+                        entity_id: !input repellent_switch
+                        state: "on"
+                        for:
+                          hours: 10
+                          minutes: 0
+                          seconds: 0
+                sequence:
+                  - if:
+                      - condition: state
+                        entity_id: !input repellent_switch
+                        state: "on"
+                    then:
+                      - action: switch.turn_off
+                        metadata: {}
+                        data: {}
+                        target:
+                          entity_id: !input repellent_switch
+
+              # - conditions:
+              #     - condition: state
+              #       entity_id: !input occupancy_select
+              #       state: Pet
+              #   sequence:
+              #     # DESLIGAR (se ligado)
+              #     - if:
+              #         - condition: state
+              #           entity_id: !input repellent_switch
+              #           state: "on"
+              #       then:
+              #         - action: switch.turn_off
+              #           metadata: {}
+              #           data: {}
+              #           target:
+              #             entity_id: !input repellent_switch
+
+              - conditions:
+                  - condition: or
+                    conditions:
+                      - condition: state
+                        entity_id: input_select.bug_willing
+                        state: Likely +1
+                      - condition: state
+                        entity_id: input_select.bug_willing
+                        state: SEVERE
+
+                sequence:
+                  - if:
+                      - condition: or
+                        conditions:
+                          - condition: state
+                            entity_id: !input occupancy_select
+                            state: Vazio
+                          - condition: state
+                            entity_id: !input occupancy_select
+                            state: Passagem
+                    then:
+                      - if:
+                          - condition: state
+                            entity_id: !input repellent_switch
+                            state: "on"
+                        then:
+                          - action: switch.turn_off
+                            metadata: {}
+                            data: {}
+                            target:
+                              entity_id: !input repellent_switch
+                  - if:
+                      - condition: or
+                        conditions:
+                          - condition: state
+                            entity_id: !input occupancy_select
+                            state: Ocupado
+                          - condition: state
+                            entity_id: !input occupancy_select
+                            state: Ocioso
+                    then:
+                      - if:
+                          - condition: state
+                            entity_id: !input repellent_switch
+                            state: "off"
+                        then:
+                          - action: switch.turn_on
+                            metadata: {}
+                            data: {}
+                            target:
+                              entity_id: !input repellent_switch
+
+              - conditions:
                   - condition: state
-                    entity_id: !input repellent_switch
-                    state: "on"
-                then:
-                  - action: switch.turn_off
-                    metadata: {}
-                    data: {}
-                    target:
-                      entity_id: !input repellent_switch
+                    entity_id: input_select.bug_willing
+                    state: Very Likely +2
+
+                sequence:
+                  - if:
+                      - condition: or
+                        conditions:
+                          - condition: state
+                            entity_id: !input occupancy_select
+                            state: Ocupado
+                          - condition: state
+                            entity_id: !input occupancy_select
+                            state: Ocioso
+                          - condition: and
+                            conditions:
+                              - condition: state
+                                entity_id: input_boolean.issomeoneathome
+                                state: "on"
+                              - condition: template
+                                value_template: !input should_turn_on_even_without_occupancy
+                    then:
+                      - if:
+                          - condition: state
+                            entity_id: !input repellent_switch
+                            state: "off"
+                        then:
+                          - action: switch.turn_on
+                            metadata: {}
+                            data: {}
+                            target:
+                              entity_id: !input repellent_switch
+                    else:
+                      - if:
+                          - condition: state
+                            entity_id: !input repellent_switch
+                            state: "on"
+                        then:
+                          - action: switch.turn_off
+                            metadata: {}
+                            data: {}
+                            target:
+                              entity_id: !input repellent_switch

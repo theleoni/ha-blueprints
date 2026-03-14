@@ -11,7 +11,7 @@ blueprint:
   #######              INPUT              #######
   input:
     mode:
-      name: Default Timer Option
+      name: Occupancy Mode
       # description: Auto-select this duration when switch is turned on manually.
       default: v1
       selector:
@@ -96,7 +96,7 @@ blueprint:
 #######         RUNNING CONFIG          #######
 mode: queued # single | restart | queued | parallel
 max: 2
-# max_exceeded: silent
+max_exceeded: silent
 
 #######             VARIABLES           #######
 variables:
@@ -159,7 +159,6 @@ conditions:
     entity_id: input_boolean.stopallstatus
     state: "off"
 
-#######              ACTIONS            #######
 #######              ACTIONS            #######
 actions:
   # mode
