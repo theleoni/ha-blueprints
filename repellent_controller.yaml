@@ -11,7 +11,6 @@ blueprint:
   input:
     mode:
       name: Occupancy Mode
-      # description: Auto-select this duration when switch is turned on manually.
       default: v1
       selector:
         select:
@@ -191,17 +190,16 @@ actions:
 
           - alias: Bug Control
             choose:
+              # --- DESLIGA: Insetos Improváveis, Desativado ou Estouro de Tempo ---
               - conditions:
                   - condition: or
                     conditions:
-                      - condition: or
-                        conditions:
-                          - condition: state
-                            entity_id: input_select.bug_willing
-                            state: Unlikely 0
-                          - condition: state
-                            entity_id: input_select.bug_willing
-                            state: Disabled
+                      - condition: state
+                        entity_id: input_select.bug_willing
+                        state: Unlikely 0
+                      - condition: state
+                        entity_id: input_select.bug_willing
+                        state: Disabled
                       - condition: state
                         entity_id: !input repellent_switch
                         state: "on"
@@ -221,12 +219,12 @@ actions:
                         target:
                           entity_id: !input repellent_switch
 
+              # --- DESLIGA: Apenas Pets ---
               - conditions:
                   - condition: state
                     entity_id: !input occupancy_select
                     state: Pet
                 sequence:
-                  # DESLIGAR (se ligado)
                   - if:
                       - condition: state
                         entity_id: !input repellent_switch
@@ -238,12 +236,17 @@ actions:
                         target:
                           entity_id: !input repellent_switch
 
+              # --- DESLIGA: Ninguém em Casa (Validação Dupla) ---
               - conditions:
-                  - condition: state
-                    entity_id: input_boolean.issomeoneathome
-                    state: "off"
+                  - condition: or
+                    conditions:
+                      - condition: state
+                        entity_id: input_boolean.issomeoneathome
+                        state: "off"
+                      - condition: state
+                        entity_id: !input occupancy_select
+                        state: Nobody home
                 sequence:
-                  # DESLIGAR (se ligado)
                   - if:
                       - condition: state
                         entity_id: !input repellent_switch
@@ -255,6 +258,7 @@ actions:
                         target:
                           entity_id: !input repellent_switch
 
+              # --- LIGA/DESLIGA: Likely +1 ou SEVERE ---
               - conditions:
                   - condition: or
                     conditions:
@@ -264,17 +268,11 @@ actions:
                       - condition: state
                         entity_id: input_select.bug_willing
                         state: SEVERE
-
                 sequence:
                   - if:
-                      - condition: or
-                        conditions:
-                          - condition: state
-                            entity_id: !input occupancy_select
-                            state: Empty
-                          - condition: state
-                            entity_id: !input occupancy_select
-                            state: Short In
+                      - condition: state
+                        entity_id: !input occupancy_select
+                        state: Empty
                     then:
                       - if:
                           - condition: state
@@ -286,26 +284,34 @@ actions:
                             data: {}
                             target:
                               entity_id: !input repellent_switch
+                    else:
+                      - if:
+                          - condition: state
+                            entity_id: !input repellent_switch
+                            state: "off"
+                        then:
+                          - action: switch.turn_on
+                            metadata: {}
+                            data: {}
+                            target:
+                              entity_id: !input repellent_switch
 
+              # --- LIGA/DESLIGA: Very Likely +2 ---
               - conditions:
                   - condition: state
                     entity_id: input_select.bug_willing
                     state: Very Likely +2
-
                 sequence:
                   - if:
-                      - condition: not
+                      - condition: or
                         conditions:
-                          - condition: or
+                          - condition: not
                             conditions:
-                              - condition: state
-                                entity_id: input_boolean.issomeoneathome
-                                state: "on"
                               - condition: state
                                 entity_id: !input occupancy_select
                                 state: Empty
-                              - condition: template
-                                value_template: !input should_turn_on_even_without_occupancy
+                          - condition: template
+                            value_template: !input should_turn_on_even_without_occupancy
                     then:
                       - if:
                           - condition: state
@@ -398,23 +404,6 @@ actions:
                         data: {}
                         target:
                           entity_id: !input repellent_switch
-
-              # - conditions:
-              #     - condition: state
-              #       entity_id: !input occupancy_select
-              #       state: Pet
-              #   sequence:
-              #     # DESLIGAR (se ligado)
-              #     - if:
-              #         - condition: state
-              #           entity_id: !input repellent_switch
-              #           state: "on"
-              #       then:
-              #         - action: switch.turn_off
-              #           metadata: {}
-              #           data: {}
-              #           target:
-              #             entity_id: !input repellent_switch
 
               - conditions:
                   - condition: or
