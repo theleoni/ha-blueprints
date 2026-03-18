@@ -6,49 +6,181 @@ blueprint:
   source_url: https://www.github.com/theleoni/ha-blueprints
 
   name: Automation based in Occupancy
-  # description:
+  description: |
+    ⚠️ IMPORTANTE: Esta automação funciona apenas com o padrão de Ocupação de Cômodo V2: 'Vazio' | 'Passagem' | 'Ocupado' | 'Ocioso'.
+
+    O Selector selecionado deve estar no padrão da casa, tendo exclusivamente as opções:
+      - "Vazio" | "Passagem" | "Ocioso" | "Ocupado";
+      - Opcionais: "Pet" | "Não perturbe";
+
+    O Seletor de Ocupação trabalha diretamente com a Entidade de Modo da Casa, que tem as opções abaixo:
+      - "Férias" | "Ninguém em Casa" | "Apenas Pets na Casa" | "Dia a Dia" | "Não perturbe" | "Faxina" | "Visitas" | "Cinema"
+
+    O Seletor da casa tem precedência ao seletor do cômodo. Ambos funcionam em combinação.
+
+    Os seguintes modos de casa tem uma relação direta com as seguintes condições de ocupação do cômodo:
+      - "Ninguém em Casa" > "Vazio"
+      - "Apenas Pets na Casa" > "Pet"
+      - "Não perturbe" > "Não perturbe"
+      - "Dia a Dia" > Segue o sensor do cômodo
+
+    Os modos adicionais ("Férias", "Faxina", "Visitas", "Cinema") podem ter sua relação configurada nos inputs, permitindo ignorar ações, usar o padrão ou forçar um estado específico.
 
   #######              INPUT              #######
   input:
     base:
-      name: Occupancy
+      name: Seletores Principais
       input:
-        occupancy_selector:
-          name: Occupancy Seletor
-          description: "Possible States: Vazio | Passagem | Ocioso | Ocupado; Optional ones: Pet | Não perturbe;"
+        house_mode_entity:
+          name: Entidade do Modo da Casa
+          description: O input_select que gerencia o estado geral da casa.
+          default: input_select.house_mode
           selector:
             entity:
               filter:
                 domain: input_select
-        occupancy_selector_debounce:
-          name: Occupancy Seletor Debounce
-          default: 0
+
+        occupancy_selector:
+          name: Occupancy Seletor do Cômodo
+          description: O input_select que gerencia o estado deste cômodo específico.
           selector:
-            number:
-              min: 0
-              max: 30
-              mode: slider
-              unit_of_measurement: s
+            entity:
+              filter:
+                domain: input_select
+
+        debounce_leave_empty:
+          name: Debounce - "Vazio" > Outro estado
+          description: Tempo de espera quando sai de "Vazio" para qualquer outro estado.
+          default:
+            hours: 0
+            minutes: 0
+            seconds: 0
+          selector:
+            duration:
+              enable_day: false
+
+        debounce_enter_empty:
+          name: Debounce - Outro estado > "Vazio"
+          description: Tempo de espera quando sai de qualquer estado para "Vazio".
+          default:
+            hours: 0
+            minutes: 0
+            seconds: 0
+          selector:
+            duration:
+              enable_day: false
+
+        debounce_any_other:
+          name: Debounce - Entre outros estados
+          description: 'Tempo de espera para mudanças que NÃO envolvem o estado "Vazio" (ex: Passagem para Ocupado).'
+          default:
+            hours: 0
+            minutes: 0
+            seconds: 0
+          selector:
+            duration:
+              enable_day: false
+
+    house_modes:
+      name: "Mapa de Ações: Modos Customizáveis da Casa"
+      description: Defina o que acontece no cômodo quando a casa entrar nestes modos específicos.
+      collapsed: true
+      input:
+        # --- FÉRIAS ---
+        house_mode_vacation:
+          name: Modo da Casa "Férias" - Ação
+          default: Ignorar
+          selector:
+            select:
+              options: &mode_options
+                - Ignorar
+                - Padrão
+                - Quando "Vazio"
+                - Quando "Passagem"
+                - Quando "Ocupado"
+                - Quando "Ocioso"
+                - Quando "Pet"
+                - Quando "Não perturbe"
+        house_mode_vacation_condition:
+          name: Modo da Casa "Férias" - Validar Condição Adicional?
+          description: Se desativado, ignora as 'Condições Adicionais' e executa a ação forçadamente.
+          default: true
+          selector:
+            boolean: {}
+
+        # --- FAXINA ---
+        house_mode_cleanning:
+          name: Modo da Casa "Faxina" - Ação
+          default: Ignorar
+          selector:
+            select:
+              options: *mode_options
+        house_mode_cleanning_condition:
+          name: Modo da Casa "Faxina" - Validar Condição Adicional?
+          description: Se desativado, ignora as 'Condições Adicionais' e executa a ação forçadamente.
+          default: true
+          selector:
+            boolean: {}
+
+        # --- VISITAS ---
+        house_mode_guest:
+          name: Modo da Casa "Visitas" - Ação
+          default: Ignorar
+          selector:
+            select:
+              options: *mode_options
+        house_mode_guest_condition:
+          name: Modo da Casa "Visitas" - Validar Condição Adicional?
+          description: Se desativado, ignora as 'Condições Adicionais' e executa a ação forçadamente.
+          default: true
+          selector:
+            boolean: {}
+
+        # --- CINEMA ---
+        house_mode_cinema:
+          name: Modo da Casa "Cinema" - Ação
+          default: Ignorar
+          selector:
+            select:
+              options: *mode_options
+        house_mode_cinema_condition:
+          name: Modo da Casa "Cinema" - Validar Condição Adicional?
+          description: Se desativado, ignora as 'Condições Adicionais' e executa a ação forçadamente.
+          default: true
+          selector:
+            boolean: {}
 
     additional_data:
-      name: Additional Trigger and Conditions
+      name: Gatilhos e Condições Adicionais
+      description: Refine o acionamento e a execução da automação com regras extras.
       input:
         additional_triggers:
-          name: Additional triggers to call this validations
+          name: Gatilhos Adicionais (Triggers)
+          description: |
+            Outros eventos da casa que também devem acionar esta automação (trigger).
+            Exemplo: A mudança de um sensor de luminosidade do cômodo, ou a ativação de algum outro interruptor que exija reavaliar o estado das luzes.
           default: []
           selector:
             trigger: {}
+
         additional_condition:
-          name: Additional Conditions
+          name: Condições Adicionais (Conditions)
+          description: |
+            Condições extras que precisam ser validadas para que as ações principais da ocupação sejam executadas. 
+            Exemplo: Validar se está escuro (usando um sensor de luminância ou um ajudante/seletor) antes de acender as luzes.
+
+            ⚠️ IMPORTANTE: Se estas condições NÃO forem atendidas (forem falsas), a automação não executará a ação da ocupação atual e irá acionar a "Ação Padrão" (default_action).
           default: []
           selector:
             condition: {}
 
-    state_actions:
-      name: Actions
+    state_empty_actions:
+      name: "Ações: Vazio & Padrão"
       input:
         default_action:
-          name: Ação padrão (condição base não atendida ou não foi possível encontrar essa opção)
+          name: Ação Padrão (Default)
+          description: Executada quando o Modo da Casa for "Padrão" ou quando as Condições Adicionais falharem.
+          default: []
           selector:
             action: {}
         base_action_empty:
@@ -56,43 +188,122 @@ blueprint:
           default: []
           selector:
             action: {}
+
+    state_default_actions:
+      name: "Ações: Estados de Ocupação"
+      input:
         base_action_short_in:
-          name: Ações quando "Passagem"
+          name: "Ações: 'Passagem'"
           default: []
           selector:
             action: {}
         base_action_long:
-          name: Ações quando "Ocupado"
+          name: "Ações: 'Ocupado'"
           default: []
           selector:
             action: {}
         base_action_short_out:
-          name: Ações quando "Ocioso"
+          name: "Ações: 'Ocioso'"
           default: []
           selector:
             action: {}
-
         base_action_pet:
-          name: Ações quando "Pet"
+          name: "Ações: 'Pet'"
           default: []
           selector:
             action: {}
         base_action_ignore:
-          name: Ações quando "Não perturbe"
+          name: "Ações: 'Não perturbe'"
           default: []
           selector:
             action: {}
 
 #######         RUNNING CONFIG          #######
-mode: queued # single | restart | queued | parallel
-# max: 2
-# max_exceeded: silent
+mode: queued
 
 #######             VARIABLES           #######
 variables:
   now_id: "{{ now().strftime('%H%M%S') }}"
   occupancy_selector_var: !input occupancy_selector
+  house_mode_entity_var: !input house_mode_entity
 
+  # 1. Captura os estados atuais das duas entidades
+  current_house_mode: "{{ states(house_mode_entity_var) }}"
+  current_occupancy: "{{ states(occupancy_selector_var) }}"
+
+  # NOVO: Captura os inputs de Pet e Não Perturbe para sabermos se estão vazios
+  base_action_pet_var: !input base_action_pet
+  base_action_ignore_var: !input base_action_ignore
+
+  # 2. Captura as escolhas dos inputs customizáveis da Blueprint
+  map_vacation: !input house_mode_vacation
+  map_cleaning: !input house_mode_cleanning
+  map_guest: !input house_mode_guest
+  map_cinema: !input house_mode_cinema
+
+  # 3. Lógica central: Qual é o "Estado Efetivo" da automação agora?
+  effective_state: >
+    {% set custom_map = {
+      'Férias': map_vacation,
+      'Faxina': map_cleaning,
+      'Visitas': map_guest,
+      'Cinema': map_cinema
+    } %}
+    {% set state_map = {
+      'Quando "Vazio"': 'Vazio',
+      'Quando "Passagem"': 'Passagem',
+      'Quando "Ocupado"': 'Ocupado',
+      'Quando "Ocioso"': 'Ocioso',
+      'Quando "Pet"': 'Pet',
+      'Quando "Não perturbe"': 'Não perturbe',
+      'Ignorar': 'Ignorar',
+      'Padrão': 'Padrão'
+    } %}
+
+    {% if current_house_mode == 'Ninguém em Casa' %}
+      Vazio
+    {% elif current_house_mode == 'Apenas Pets na Casa' %}
+      {% if base_action_pet_var | length > 0 %}
+        Pet
+      {% else %}
+        {{ current_occupancy }}
+      {% endif %}
+    {% elif current_house_mode == 'Não perturbe' %}
+      {% if base_action_ignore_var | length > 0 %}
+        Não perturbe
+      {% else %}
+        {{ current_occupancy }}
+      {% endif %}
+    {% elif current_house_mode == 'Dia a Dia' %}
+      {{ current_occupancy }}
+    {% elif current_house_mode in custom_map %}
+      {% set selected_option = custom_map[current_house_mode] %}
+      {{ state_map.get(selected_option, current_occupancy) }}
+    {% else %}
+      {{ current_occupancy }}
+    {% endif %}
+
+  # 4. Captura as opções de validação condicional (booleanos)
+  cond_vacation: !input house_mode_vacation_condition
+  cond_cleaning: !input house_mode_cleanning_condition
+  cond_guest: !input house_mode_guest_condition
+  cond_cinema: !input house_mode_cinema_condition
+
+  # 5. Lógica: A automação deve validar as "Condições Adicionais" agora?
+  evaluate_conditions: >
+    {% if current_house_mode == 'Férias' %}
+      {{ cond_vacation | lower }}
+    {% elif current_house_mode == 'Faxina' %}
+      {{ cond_cleaning | lower }}
+    {% elif current_house_mode == 'Visitas' %}
+      {{ cond_guest | lower }}
+    {% elif current_house_mode == 'Cinema' %}
+      {{ cond_cinema | lower }}
+    {% else %}
+      true
+    {% endif %}
+
+  # 6. Tratamento das variáveis de ação (Listas)
   base_action_empty_var: !input base_action_empty
   actions_empty: >
     {% if base_action_empty_var is mapping %}
@@ -133,7 +344,6 @@ variables:
       []
     {% endif %}
 
-  base_action_pet_var: !input base_action_pet
   actions_pet: >
     {% if base_action_pet_var is mapping %}
       {{ [base_action_pet_var] }}
@@ -143,7 +353,6 @@ variables:
       []
     {% endif %}
 
-  base_action_ignore_var: !input base_action_ignore
   actions_ignore: >
     {% if base_action_ignore_var is mapping %}
       {{ [base_action_ignore_var] }}
@@ -156,15 +365,38 @@ variables:
 #######             TRIGGERS            #######
 triggers:
   - triggers: !input additional_triggers
+
   - trigger: state
     entity_id: input_boolean.runallautomation
 
   - trigger: state
+    entity_id: !input house_mode_entity
+
+  - trigger: state
     entity_id: !input occupancy_selector
-    for:
-      hours: 0
-      minutes: 0
-      seconds: !input occupancy_selector_debounce
+    from: "Vazio"
+    for: !input debounce_leave_empty
+
+  - trigger: state
+    entity_id: !input occupancy_selector
+    to: "Vazio"
+    for: !input debounce_enter_empty
+
+  - trigger: state
+    entity_id: !input occupancy_selector
+    from:
+      - "Passagem"
+      - "Ocioso"
+      - "Ocupado"
+      - "Pet"
+      - "Não perturbe"
+    to:
+      - "Passagem"
+      - "Ocioso"
+      - "Ocupado"
+      - "Pet"
+      - "Não perturbe"
+    for: !input debounce_any_other
 
 #######            CONDITIONS           #######
 conditions:
@@ -175,14 +407,18 @@ conditions:
 #######              ACTIONS            #######
 actions:
   - choose:
+      # --- 1. VAZIO ---
       - conditions:
-          - condition: state
-            entity_id: !input occupancy_selector
-            state: "Vazio"
+          - condition: template
+            value_template: "{{ effective_state == 'Vazio' }}"
         sequence:
           - if:
-              - condition: and
-                conditions: !input additional_condition
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ evaluate_conditions == 'false' }}"
+                  - condition: and
+                    conditions: !input additional_condition
             then:
               - choose:
                   - conditions: "{{ actions_empty | length > 0 }}"
@@ -190,14 +426,18 @@ actions:
             else:
               - sequence: !input default_action
 
+      # --- 2. PASSAGEM ---
       - conditions:
-          - condition: state
-            entity_id: !input occupancy_selector
-            state: "Passagem"
+          - condition: template
+            value_template: "{{ effective_state == 'Passagem' }}"
         sequence:
           - if:
-              - condition: and
-                conditions: !input additional_condition
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ evaluate_conditions == 'false' }}"
+                  - condition: and
+                    conditions: !input additional_condition
             then:
               - choose:
                   - conditions: "{{ actions_short_in | length > 0 }}"
@@ -205,14 +445,18 @@ actions:
             else:
               - sequence: !input default_action
 
+      # --- 3. OCUPADO ---
       - conditions:
-          - condition: state
-            entity_id: !input occupancy_selector
-            state: "Ocupado"
+          - condition: template
+            value_template: "{{ effective_state == 'Ocupado' }}"
         sequence:
           - if:
-              - condition: and
-                conditions: !input additional_condition
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ evaluate_conditions == 'false' }}"
+                  - condition: and
+                    conditions: !input additional_condition
             then:
               - choose:
                   - conditions: "{{ actions_long | length > 0 }}"
@@ -220,14 +464,18 @@ actions:
             else:
               - sequence: !input default_action
 
+      # --- 4. OCIOSO ---
       - conditions:
-          - condition: state
-            entity_id: !input occupancy_selector
-            state: "Ocioso"
+          - condition: template
+            value_template: "{{ effective_state == 'Ocioso' }}"
         sequence:
           - if:
-              - condition: and
-                conditions: !input additional_condition
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ evaluate_conditions == 'false' }}"
+                  - condition: and
+                    conditions: !input additional_condition
             then:
               - choose:
                   - conditions: "{{ actions_short_out | length > 0 }}"
@@ -235,14 +483,18 @@ actions:
             else:
               - sequence: !input default_action
 
+      # --- 5. PET ---
       - conditions:
-          - condition: state
-            entity_id: !input occupancy_selector
-            state: "Pet"
+          - condition: template
+            value_template: "{{ effective_state == 'Pet' }}"
         sequence:
           - if:
-              - condition: and
-                conditions: !input additional_condition
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ evaluate_conditions == 'false' }}"
+                  - condition: and
+                    conditions: !input additional_condition
             then:
               - choose:
                   - conditions: "{{ actions_pet | length > 0 }}"
@@ -250,14 +502,18 @@ actions:
             else:
               - sequence: !input default_action
 
+      # --- 6. NÃO PERTURBE ---
       - conditions:
-          - condition: state
-            entity_id: !input occupancy_selector
-            state: "Não perturbe"
+          - condition: template
+            value_template: "{{ effective_state == 'Não perturbe' }}"
         sequence:
           - if:
-              - condition: and
-                conditions: !input additional_condition
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ evaluate_conditions == 'false' }}"
+                  - condition: and
+                    conditions: !input additional_condition
             then:
               - choose:
                   - conditions: "{{ actions_ignore | length > 0 }}"
@@ -265,11 +521,20 @@ actions:
             else:
               - sequence: !input default_action
 
+      # --- 7. IGNORAR (Do Modo da Casa) ---
+      - conditions:
+          - condition: template
+            value_template: "{{ effective_state == 'Ignorar' }}"
+        sequence:
+          - stop: "Ação configurada para ser ignorada pelo Modo da Casa atual."
+
+      # --- 8. PADRÃO (Do Modo da Casa) ---
+      - conditions:
+          - condition: template
+            value_template: "{{ effective_state == 'Padrão' }}"
+        sequence:
+          - sequence: !input default_action
+
+    # --- CATCH-ALL ---
     default:
       - sequence: !input default_action
-      # - action: script.send_message
-      #   metadata: {}
-      #   data:
-      #     title: "Not able to handle Occupancy Selector"
-      #     message: "State '{{ states(occupancy_selector_var) }}' not found in automation {{ this.attributes.friendly_name }}."
-      #     id: "notification_occupancy_based_{{ now_id }}"
