@@ -5,35 +5,31 @@ blueprint:
   author: Guilherme C. Leoni (https://github.com/theleoni)
   source_url: https://www.github.com/theleoni/ha-blueprints
 
-  name: Automation based in Occupancy
+  name: "Automation based in Occupancy"
   description: |
     ⚠️ IMPORTANTE: Esta automação funciona apenas com o padrão de Ocupação de Cômodo V2: 'Vazio' | 'Passagem' | 'Ocupado' | 'Ocioso'.
 
-    O Selector selecionado deve estar no padrão da casa, tendo exclusivamente as opções:
-      - "Vazio" | "Passagem" | "Ocioso" | "Ocupado";
-      - Opcionais: "Pet" | "Não perturbe";
+    O Seletor de Ocupação trabalha em conjunto com a Entidade de Modo da Casa. O Modo da Casa tem precedência.
 
-    O Seletor de Ocupação trabalha diretamente com a Entidade de Modo da Casa, que tem as opções abaixo:
-      - "Férias" | "Ninguém em Casa" | "Apenas Pets na Casa" | "Dia a Dia" | "Não perturbe" | "Faxina" | "Visitas" | "Cinema"
+    Mapeamento Direto dos Modos da Casa:
+      - "Ninguém em Casa" > Aciona ações de "Vazio"
+      - "Apenas Pets na Casa" > Aciona ações de "Pet"
+      - "Não perturbe" > Aciona ações de "Não perturbe"
+      - "Dia a Dia" > Segue o sensor de ocupação do cômodo (Passagem, Ocupado, Ocioso)
 
-    O Seletor da casa tem precedência ao seletor do cômodo. Ambos funcionam em combinação.
-
-    Os seguintes modos de casa tem uma relação direta com as seguintes condições de ocupação do cômodo:
-      - "Ninguém em Casa" > "Vazio"
-      - "Apenas Pets na Casa" > "Pet"
-      - "Não perturbe" > "Não perturbe"
-      - "Dia a Dia" > Segue o sensor do cômodo
-
-    Os modos adicionais ("Férias", "Faxina", "Visitas", "Cinema") podem ter sua relação configurada nos inputs, permitindo ignorar ações, usar o padrão ou forçar um estado específico.
+    Modos adicionais ("Férias", "Dormindo", "Faxina", "Visitas", "Cinema") possuem seções individuais de ações, permitindo definir comportamentos independentes e validar condições extras (ex: luminosidade ou janelas).
 
   #######              INPUT              #######
   input:
+    # --- 1. SELETORES PRINCIPAIS ---
     base:
-      name: Seletores Principais
+      name: "Seletores Principais"
+      collapsed: false
+      icon: mdi:tune
       input:
         house_mode_entity:
-          name: Entidade do Modo da Casa
-          description: O input_select que gerencia o estado geral da casa.
+          name: "Entidade do Modo da Casa"
+          description: "O input_select que gerencia o estado geral da casa."
           default: input_select.house_mode
           selector:
             entity:
@@ -41,182 +37,217 @@ blueprint:
                 domain: input_select
 
         occupancy_selector:
-          name: Occupancy Seletor do Cômodo
-          description: O input_select que gerencia o estado deste cômodo específico.
+          name: "Occupancy Seletor do Cômodo"
+          description: "O input_select que gerencia o estado deste cômodo específico."
           selector:
             entity:
               filter:
                 domain: input_select
 
         debounce_leave_empty:
-          name: Debounce - "Vazio" > Outro estado
-          description: Tempo de espera quando sai de "Vazio" para qualquer outro estado.
-          default:
-            hours: 0
-            minutes: 0
-            seconds: 0
-          selector:
-            duration:
-              enable_day: false
+          name: "Debounce - 'Vazio' > Outro estado"
+          description: "Tempo de espera quando sai de 'Vazio' para qualquer outro estado."
+          default: { hours: 0, minutes: 0, seconds: 0 }
+          selector: { duration: { enable_day: false } }
 
         debounce_enter_empty:
-          name: Debounce - Outro estado > "Vazio"
-          description: Tempo de espera quando sai de qualquer estado para "Vazio".
-          default:
-            hours: 0
-            minutes: 0
-            seconds: 0
-          selector:
-            duration:
-              enable_day: false
+          name: "Debounce - Outro estado > 'Vazio'"
+          description: "Tempo de espera quando sai de qualquer estado para 'Vazio'."
+          default: { hours: 0, minutes: 0, seconds: 0 }
+          selector: { duration: { enable_day: false } }
 
         debounce_any_other:
-          name: Debounce - Entre outros estados
-          description: 'Tempo de espera para mudanças que NÃO envolvem o estado "Vazio" (ex: Passagem para Ocupado).'
-          default:
-            hours: 0
-            minutes: 0
-            seconds: 0
-          selector:
-            duration:
-              enable_day: false
+          name: "Debounce - Entre outros estados"
+          description: "Tempo de espera para mudanças que NÃO envolvem o estado 'Vazio' (ex: Passagem para Ocupado)."
+          default: { hours: 0, minutes: 0, seconds: 0 }
+          selector: { duration: { enable_day: false } }
 
-    house_modes:
-      name: "Mapa de Ações: Modos Customizáveis da Casa"
-      description: Defina o que acontece no cômodo quando a casa entrar nestes modos específicos.
-      collapsed: true
-      input:
-        # --- FÉRIAS ---
-        house_mode_vacation:
-          name: Modo da Casa "Férias" - Ação
-          default: Ignorar
-          selector:
-            select:
-              options: &mode_options
-                - Ignorar
-                - Padrão
-                - Quando "Vazio"
-                - Quando "Passagem"
-                - Quando "Ocupado"
-                - Quando "Ocioso"
-                - Quando "Pet"
-                - Quando "Não perturbe"
-        house_mode_vacation_condition:
-          name: Modo da Casa "Férias" - Validar Condição Adicional?
-          description: Se desativado, ignora as 'Condições Adicionais' e executa a ação forçadamente.
-          default: true
-          selector:
-            boolean: {}
-
-        # --- FAXINA ---
-        house_mode_cleanning:
-          name: Modo da Casa "Faxina" - Ação
-          default: Ignorar
-          selector:
-            select:
-              options: *mode_options
-        house_mode_cleanning_condition:
-          name: Modo da Casa "Faxina" - Validar Condição Adicional?
-          description: Se desativado, ignora as 'Condições Adicionais' e executa a ação forçadamente.
-          default: true
-          selector:
-            boolean: {}
-
-        # --- VISITAS ---
-        house_mode_guest:
-          name: Modo da Casa "Visitas" - Ação
-          default: Ignorar
-          selector:
-            select:
-              options: *mode_options
-        house_mode_guest_condition:
-          name: Modo da Casa "Visitas" - Validar Condição Adicional?
-          description: Se desativado, ignora as 'Condições Adicionais' e executa a ação forçadamente.
-          default: true
-          selector:
-            boolean: {}
-
-        # --- CINEMA ---
-        house_mode_cinema:
-          name: Modo da Casa "Cinema" - Ação
-          default: Ignorar
-          selector:
-            select:
-              options: *mode_options
-        house_mode_cinema_condition:
-          name: Modo da Casa "Cinema" - Validar Condição Adicional?
-          description: Se desativado, ignora as 'Condições Adicionais' e executa a ação forçadamente.
-          default: true
-          selector:
-            boolean: {}
-
+    # --- 2. GATILHOS E CONDIÇÕES ADICIONAIS ---
     additional_data:
-      name: Gatilhos e Condições Adicionais
-      description: Refine o acionamento e a execução da automação com regras extras.
+      name: "Gatilhos e Condições Adicionais"
+      description: "Refine o acionamento e a execução da automação com regras extras."
+      collapsed: false
+      icon: mdi:filter-plus-outline
       input:
         additional_triggers:
-          name: Gatilhos Adicionais (Triggers)
-          description: |
-            Outros eventos da casa que também devem acionar esta automação (trigger).
-            Exemplo: A mudança de um sensor de luminosidade do cômodo, ou a ativação de algum outro interruptor que exija reavaliar o estado das luzes.
+          name: "Gatilhos Adicionais (Triggers)"
+          description: "Outros eventos que também devem acionar esta automação (ex: mudança em sensor de luz)."
           default: []
           selector:
             trigger: {}
-
         additional_condition:
-          name: Condições Adicionais (Conditions)
-          description: |
-            Condições extras que precisam ser validadas para que as ações principais da ocupação sejam executadas. 
-            Exemplo: Validar se está escuro (usando um sensor de luminância ou um ajudante/seletor) antes de acender as luzes.
-
-            ⚠️ IMPORTANTE: Se estas condições NÃO forem atendidas (forem falsas), a automação não executará a ação da ocupação atual e irá acionar a "Ação Padrão" (default_action).
+          name: "Condições Adicionais (Conditions)"
+          description: "Condições extras que precisam ser validadas para executar as ações principais. ⚠️ Se falsas, executa a 'Ação Padrão'."
           default: []
           selector:
             condition: {}
-
-    state_empty_actions:
-      name: "Ações: Vazio & Padrão"
-      input:
         default_action:
-          name: Ação Padrão (Default)
-          description: Executada quando o Modo da Casa for "Padrão" ou quando as Condições Adicionais falharem.
+          name: "Ação Padrão (Default)"
+          description: "Executada quando as Condições Adicionais falharem para o estado atual."
           default: []
-          selector:
-            action: {}
-        base_action_empty:
-          name: Ações quando "Vazio"
-          default: []
-          selector:
-            action: {}
+          selector: { action: {} }
 
-    state_default_actions:
-      name: "Ações: Estados de Ocupação"
+    # --- 3. NÃO PERTURBE ---
+    action_ignore_section:
+      name: "Ações: Não perturbe"
+      description: "O que fazer quando a casa estiver em 'Não perturbe'."
+      collapsed: false
+      icon: mdi:minus-circle
+      input:
+        base_action_ignore:
+          name: "Ações"
+          default: []
+          selector: { action: {} }
+        cond_ignore_bool:
+          name: "Validar Condição Adicional?"
+          default: true
+          selector: { boolean: {} }
+
+    # --- 4. VAZIO ---
+    state_empty_actions:
+      name: "Ações: Vazio"
+      description: "Ações de desligamento/espera (Vazio)."
+      collapsed: false
+      icon: mdi:home-outline
+      input:
+        base_action_empty:
+          name: "Ações quando Vazio"
+          default: []
+          selector: { action: {} }
+        cond_empty_bool:
+          name: "Validar Condição Adicional (Vazio)?"
+          default: true
+          selector: { boolean: {} }
+
+    # --- 5. FÉRIAS ---
+    house_mode_vacation_section:
+      name: "Modo da Casa: Férias"
+      collapsed: false
+      icon: mdi:airplane
+      input:
+        action_vacation:
+          name: "Ações quando Férias"
+          default: []
+          selector: { action: {} }
+        cond_vacation_bool:
+          name: "Validar Condição Adicional?"
+          description: "Se desativado, ignora as 'Condições Adicionais' e executa a ação forçadamente."
+          default: true
+          selector: { boolean: {} }
+
+    # --- 6. DIA A DIA (OCUPAÇÃO) ---
+    everyday_occupancy_section:
+      name: "Ações: Dia a Dia (Ocupação)"
+      description: "Ações para o fluxo normal do cômodo (Passagem, Ocupado e Ocioso)."
+      collapsed: false
+      icon: mdi:account-check
       input:
         base_action_short_in:
-          name: "Ações: 'Passagem'"
+          name: "Ações: Passagem"
           default: []
-          selector:
-            action: {}
+          selector: { action: {} }
+        cond_short_in_bool:
+          name: "Validar Condição Adicional (Passagem)?"
+          default: true
+          selector: { boolean: {} }
+
         base_action_long:
-          name: "Ações: 'Ocupado'"
+          name: "Ações: Ocupado"
           default: []
-          selector:
-            action: {}
+          selector: { action: {} }
+        cond_long_bool:
+          name: "Validar Condição Adicional (Ocupado)?"
+          default: true
+          selector: { boolean: {} }
+
         base_action_short_out:
-          name: "Ações: 'Ocioso'"
+          name: "Ações: Ocioso"
           default: []
-          selector:
-            action: {}
+          selector: { action: {} }
+        cond_short_out_bool:
+          name: "Validar Condição Adicional (Ocioso)?"
+          default: true
+          selector: { boolean: {} }
+
+    # --- 7. DORMINDO ---
+    house_mode_sleeping_section:
+      name: "Modo da Casa: Dormindo"
+      collapsed: false
+      icon: mdi:sleep
+      input:
+        action_sleeping:
+          name: "Ações quando Dormindo"
+          default: []
+          selector: { action: {} }
+        cond_sleeping_bool:
+          name: "Validar Condição Adicional?"
+          description: "Se desativado, ignora as 'Condições Adicionais' e executa a ação forçadamente."
+          default: true
+          selector: { boolean: {} }
+
+    # --- 8. PET ---
+    action_pet_section:
+      name: "Ações: Pet"
+      description: "O que fazer quando apenas os pets estiverem na casa."
+      collapsed: false
+      icon: mdi:paw
+      input:
         base_action_pet:
-          name: "Ações: 'Pet'"
+          name: "Ações"
           default: []
-          selector:
-            action: {}
-        base_action_ignore:
-          name: "Ações: 'Não perturbe'"
+          selector: { action: {} }
+        cond_pet_bool:
+          name: "Validar Condição Adicional?"
+          default: true
+          selector: { boolean: {} }
+
+    # --- 9. FAXINA ---
+    house_mode_cleanning_section:
+      name: "Modo da Casa: Faxina"
+      collapsed: false
+      icon: mdi:broom
+      input:
+        action_cleanning:
+          name: "Ações quando Faxina"
           default: []
-          selector:
-            action: {}
+          selector: { action: {} }
+        cond_cleanning_bool:
+          name: "Validar Condição Adicional?"
+          description: "Se desativado, ignora as 'Condições Adicionais' e executa a ação forçadamente."
+          default: true
+          selector: { boolean: {} }
+
+    # --- 10. VISITAS ---
+    house_mode_guest_section:
+      name: "Modo da Casa: Visitas"
+      collapsed: false
+      icon: mdi:account-group
+      input:
+        action_guest:
+          name: "Ações quando Visitas"
+          default: []
+          selector: { action: {} }
+        cond_guest_bool:
+          name: "Validar Condição Adicional?"
+          description: "Se desativado, ignora as 'Condições Adicionais' e executa a ação forçadamente."
+          default: true
+          selector: { boolean: {} }
+
+    # --- 11. CINEMA ---
+    house_mode_cinema_section:
+      name: "Modo da Casa: Cinema"
+      collapsed: false
+      icon: mdi:popcorn
+      input:
+        action_cinema:
+          name: "Ações quando Cinema"
+          default: []
+          selector: { action: {} }
+        cond_cinema_bool:
+          name: "Validar Condição Adicional?"
+          description: "Se desativado, ignora as 'Condições Adicionais' e executa a ação forçadamente."
+          default: true
+          selector: { boolean: {} }
 
 #######         RUNNING CONFIG          #######
 mode: queued
@@ -231,136 +262,109 @@ variables:
   current_house_mode: "{{ states(house_mode_entity_var) }}"
   current_occupancy: "{{ states(occupancy_selector_var) }}"
 
-  # NOVO: Captura os inputs de Pet e Não Perturbe para sabermos se estão vazios
-  base_action_pet_var: !input base_action_pet
-  base_action_ignore_var: !input base_action_ignore
-
-  # 2. Captura as escolhas dos inputs customizáveis da Blueprint
-  map_vacation: !input house_mode_vacation
-  map_cleaning: !input house_mode_cleanning
-  map_guest: !input house_mode_guest
-  map_cinema: !input house_mode_cinema
-
-  # 3. Lógica central: Qual é o "Estado Efetivo" da automação agora?
+  # 2. Lógica central: Qual é o "Estado Efetivo" da automação agora?
   effective_state: >
-    {% set custom_map = {
-      'Férias': map_vacation,
-      'Faxina': map_cleaning,
-      'Visitas': map_guest,
-      'Cinema': map_cinema
-    } %}
-    {% set state_map = {
-      'Quando "Vazio"': 'Vazio',
-      'Quando "Passagem"': 'Passagem',
-      'Quando "Ocupado"': 'Ocupado',
-      'Quando "Ocioso"': 'Ocioso',
-      'Quando "Pet"': 'Pet',
-      'Quando "Não perturbe"': 'Não perturbe',
-      'Ignorar': 'Ignorar',
-      'Padrão': 'Padrão'
-    } %}
+    {% if current_house_mode == 'Ninguém em Casa' %} Vazio
+    {% elif current_house_mode == 'Apenas Pets na Casa' %} Pet
+    {% elif current_house_mode == 'Não perturbe' %} Não perturbe
+    {% elif current_house_mode in ['Férias', 'Faxina', 'Visitas', 'Cinema', 'Dormindo'] %} {{ current_house_mode }}
+    {% else %} {{ current_occupancy }} {% endif %}
 
-    {% if current_house_mode == 'Ninguém em Casa' %}
-      Vazio
-    {% elif current_house_mode == 'Apenas Pets na Casa' %}
-      {% if base_action_pet_var | length > 0 %}
-        Pet
-      {% else %}
-        {{ current_occupancy }}
-      {% endif %}
-    {% elif current_house_mode == 'Não perturbe' %}
-      {% if base_action_ignore_var | length > 0 %}
-        Não perturbe
-      {% else %}
-        {{ current_occupancy }}
-      {% endif %}
-    {% elif current_house_mode == 'Dia a Dia' %}
-      {{ current_occupancy }}
-    {% elif current_house_mode in custom_map %}
-      {% set selected_option = custom_map[current_house_mode] %}
-      {{ state_map.get(selected_option, current_occupancy) }}
-    {% else %}
-      {{ current_occupancy }}
-    {% endif %}
+  # 3. Captura as opções de validação condicional de TODOS os estados
+  cond_vacation: !input cond_vacation_bool
+  cond_cleaning: !input cond_cleanning_bool
+  cond_guest: !input cond_guest_bool
+  cond_cinema: !input cond_cinema_bool
+  cond_sleeping: !input cond_sleeping_bool
+  cond_empty: !input cond_empty_bool
+  cond_short_in: !input cond_short_in_bool
+  cond_long: !input cond_long_bool
+  cond_short_out: !input cond_short_out_bool
+  cond_pet: !input cond_pet_bool
+  cond_ignore: !input cond_ignore_bool
 
-  # 4. Captura as opções de validação condicional (booleanos)
-  cond_vacation: !input house_mode_vacation_condition
-  cond_cleaning: !input house_mode_cleanning_condition
-  cond_guest: !input house_mode_guest_condition
-  cond_cinema: !input house_mode_cinema_condition
-
-  # 5. Lógica: A automação deve validar as "Condições Adicionais" agora?
+  # 4. Lógica: A automação deve validar as "Condições Adicionais" para o estado atual?
   evaluate_conditions: >
-    {% if current_house_mode == 'Férias' %}
-      {{ cond_vacation | lower }}
-    {% elif current_house_mode == 'Faxina' %}
-      {{ cond_cleaning | lower }}
-    {% elif current_house_mode == 'Visitas' %}
-      {{ cond_guest | lower }}
-    {% elif current_house_mode == 'Cinema' %}
-      {{ cond_cinema | lower }}
-    {% else %}
-      true
-    {% endif %}
+    {% if effective_state == 'Férias' %} {{ cond_vacation | lower }}
+    {% elif effective_state == 'Faxina' %} {{ cond_cleaning | lower }}
+    {% elif effective_state == 'Visitas' %} {{ cond_guest | lower }}
+    {% elif effective_state == 'Cinema' %} {{ cond_cinema | lower }}
+    {% elif effective_state == 'Dormindo' %} {{ cond_sleeping | lower }}
+    {% elif effective_state == 'Vazio' %} {{ cond_empty | lower }}
+    {% elif effective_state == 'Passagem' %} {{ cond_short_in | lower }}
+    {% elif effective_state == 'Ocupado' %} {{ cond_long | lower }}
+    {% elif effective_state == 'Ocioso' %} {{ cond_short_out | lower }}
+    {% elif effective_state == 'Pet' %} {{ cond_pet | lower }}
+    {% elif effective_state == 'Não perturbe' %} {{ cond_ignore | lower }}
+    {% else %} true {% endif %}
 
-  # 6. Tratamento das variáveis de ação (Listas)
+  # 5. Tratamento das variáveis de ação dos Modos da Casa
+  action_vacation_var: !input action_vacation
+  actions_vacation: >
+    {% if action_vacation_var is mapping %} {{ [action_vacation_var] }}
+    {% elif action_vacation_var is iterable and action_vacation_var is not string %} {{ action_vacation_var }}
+    {% else %} [] {% endif %}
+
+  action_cleanning_var: !input action_cleanning
+  actions_cleanning: >
+    {% if action_cleanning_var is mapping %} {{ [action_cleanning_var] }}
+    {% elif action_cleanning_var is iterable and action_cleanning_var is not string %} {{ action_cleanning_var }}
+    {% else %} [] {% endif %}
+
+  action_guest_var: !input action_guest
+  actions_guest: >
+    {% if action_guest_var is mapping %} {{ [action_guest_var] }}
+    {% elif action_guest_var is iterable and action_guest_var is not string %} {{ action_guest_var }}
+    {% else %} [] {% endif %}
+
+  action_cinema_var: !input action_cinema
+  actions_cinema: >
+    {% if action_cinema_var is mapping %} {{ [action_cinema_var] }}
+    {% elif action_cinema_var is iterable and action_cinema_var is not string %} {{ action_cinema_var }}
+    {% else %} [] {% endif %}
+
+  action_sleeping_var: !input action_sleeping
+  actions_sleeping: >
+    {% if action_sleeping_var is mapping %} {{ [action_sleeping_var] }}
+    {% elif action_sleeping_var is iterable and action_sleeping_var is not string %} {{ action_sleeping_var }}
+    {% else %} [] {% endif %}
+
+  # 6. Tratamento das variáveis de ação da Ocupação Padrão
   base_action_empty_var: !input base_action_empty
   actions_empty: >
-    {% if base_action_empty_var is mapping %}
-      {{ [base_action_empty_var] }}
-    {% elif base_action_empty_var is iterable and base_action_empty_var is not string %}
-      {{ base_action_empty_var }}
-    {% else %}
-      []
-    {% endif %}
+    {% if base_action_empty_var is mapping %} {{ [base_action_empty_var] }}
+    {% elif base_action_empty_var is iterable and base_action_empty_var is not string %} {{ base_action_empty_var }}
+    {% else %} [] {% endif %}
 
   base_action_short_in_var: !input base_action_short_in
   actions_short_in: >
-    {% if base_action_short_in_var is mapping %}
-      {{ [base_action_short_in_var] }}
-    {% elif base_action_short_in_var is iterable and base_action_short_in_var is not string %}
-      {{ base_action_short_in_var }}
-    {% else %}
-      []
-    {% endif %}
+    {% if base_action_short_in_var is mapping %} {{ [base_action_short_in_var] }}
+    {% elif base_action_short_in_var is iterable and base_action_short_in_var is not string %} {{ base_action_short_in_var }}
+    {% else %} [] {% endif %}
 
   base_action_long_var: !input base_action_long
   actions_long: >
-    {% if base_action_long_var is mapping %}
-      {{ [base_action_long_var] }}
-    {% elif base_action_long_var is iterable and base_action_long_var is not string %}
-      {{ base_action_long_var }}
-    {% else %}
-      []
-    {% endif %}
+    {% if base_action_long_var is mapping %} {{ [base_action_long_var] }}
+    {% elif base_action_long_var is iterable and base_action_long_var is not string %} {{ base_action_long_var }}
+    {% else %} [] {% endif %}
 
   base_action_short_out_var: !input base_action_short_out
   actions_short_out: >
-    {% if base_action_short_out_var is mapping %}
-      {{ [base_action_short_out_var] }}
-    {% elif base_action_short_out_var is iterable and base_action_short_out_var is not string %}
-      {{ base_action_short_out_var }}
-    {% else %}
-      []
-    {% endif %}
+    {% if base_action_short_out_var is mapping %} {{ [base_action_short_out_var] }}
+    {% elif base_action_short_out_var is iterable and base_action_short_out_var is not string %} {{ base_action_short_out_var }}
+    {% else %} [] {% endif %}
 
+  base_action_pet_var: !input base_action_pet
   actions_pet: >
-    {% if base_action_pet_var is mapping %}
-      {{ [base_action_pet_var] }}
-    {% elif base_action_pet_var is iterable and base_action_pet_var is not string %}
-      {{ base_action_pet_var }}
-    {% else %}
-      []
-    {% endif %}
+    {% if base_action_pet_var is mapping %} {{ [base_action_pet_var] }}
+    {% elif base_action_pet_var is iterable and base_action_pet_var is not string %} {{ base_action_pet_var }}
+    {% else %} [] {% endif %}
 
+  base_action_ignore_var: !input base_action_ignore
   actions_ignore: >
-    {% if base_action_ignore_var is mapping %}
-      {{ [base_action_ignore_var] }}
-    {% elif base_action_ignore_var is iterable and base_action_ignore_var is not string %}
-      {{ base_action_ignore_var }}
-    {% else %}
-      []
-    {% endif %}
+    {% if base_action_ignore_var is mapping %} {{ [base_action_ignore_var] }}
+    {% elif base_action_ignore_var is iterable and base_action_ignore_var is not string %} {{ base_action_ignore_var }}
+    {% else %} [] {% endif %}
 
 #######             TRIGGERS            #######
 triggers:
@@ -388,14 +392,10 @@ triggers:
       - "Passagem"
       - "Ocioso"
       - "Ocupado"
-      - "Pet"
-      - "Não perturbe"
     to:
       - "Passagem"
       - "Ocioso"
       - "Ocupado"
-      - "Pet"
-      - "Não perturbe"
     for: !input debounce_any_other
 
 #######            CONDITIONS           #######
@@ -407,7 +407,98 @@ conditions:
 #######              ACTIONS            #######
 actions:
   - choose:
-      # --- 1. VAZIO ---
+      # --- 1. MODOS DA CASA ---
+      - conditions:
+          - condition: template
+            value_template: "{{ effective_state == 'Férias' }}"
+        sequence:
+          - if:
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ evaluate_conditions == 'false' }}"
+                  - condition: and
+                    conditions: !input additional_condition
+            then:
+              - choose:
+                  - conditions: "{{ actions_vacation | length > 0 }}"
+                    sequence: !input action_vacation
+            else:
+              - sequence: !input default_action
+
+      - conditions:
+          - condition: template
+            value_template: "{{ effective_state == 'Faxina' }}"
+        sequence:
+          - if:
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ evaluate_conditions == 'false' }}"
+                  - condition: and
+                    conditions: !input additional_condition
+            then:
+              - choose:
+                  - conditions: "{{ actions_cleanning | length > 0 }}"
+                    sequence: !input action_cleanning
+            else:
+              - sequence: !input default_action
+
+      - conditions:
+          - condition: template
+            value_template: "{{ effective_state == 'Visitas' }}"
+        sequence:
+          - if:
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ evaluate_conditions == 'false' }}"
+                  - condition: and
+                    conditions: !input additional_condition
+            then:
+              - choose:
+                  - conditions: "{{ actions_guest | length > 0 }}"
+                    sequence: !input action_guest
+            else:
+              - sequence: !input default_action
+
+      - conditions:
+          - condition: template
+            value_template: "{{ effective_state == 'Cinema' }}"
+        sequence:
+          - if:
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ evaluate_conditions == 'false' }}"
+                  - condition: and
+                    conditions: !input additional_condition
+            then:
+              - choose:
+                  - conditions: "{{ actions_cinema | length > 0 }}"
+                    sequence: !input action_cinema
+            else:
+              - sequence: !input default_action
+              
+      - conditions:
+          - condition: template
+            value_template: "{{ effective_state == 'Dormindo' }}"
+        sequence:
+          - if:
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ evaluate_conditions == 'false' }}"
+                  - condition: and
+                    conditions: !input additional_condition
+            then:
+              - choose:
+                  - conditions: "{{ actions_sleeping | length > 0 }}"
+                    sequence: !input action_sleeping
+            else:
+              - sequence: !input default_action
+
+      # --- 2. ESTADOS DE OCUPAÇÃO PADRÃO E ESPECIAIS ---
       - conditions:
           - condition: template
             value_template: "{{ effective_state == 'Vazio' }}"
@@ -426,7 +517,6 @@ actions:
             else:
               - sequence: !input default_action
 
-      # --- 2. PASSAGEM ---
       - conditions:
           - condition: template
             value_template: "{{ effective_state == 'Passagem' }}"
@@ -445,7 +535,6 @@ actions:
             else:
               - sequence: !input default_action
 
-      # --- 3. OCUPADO ---
       - conditions:
           - condition: template
             value_template: "{{ effective_state == 'Ocupado' }}"
@@ -464,7 +553,6 @@ actions:
             else:
               - sequence: !input default_action
 
-      # --- 4. OCIOSO ---
       - conditions:
           - condition: template
             value_template: "{{ effective_state == 'Ocioso' }}"
@@ -483,7 +571,6 @@ actions:
             else:
               - sequence: !input default_action
 
-      # --- 5. PET ---
       - conditions:
           - condition: template
             value_template: "{{ effective_state == 'Pet' }}"
@@ -502,7 +589,6 @@ actions:
             else:
               - sequence: !input default_action
 
-      # --- 6. NÃO PERTURBE ---
       - conditions:
           - condition: template
             value_template: "{{ effective_state == 'Não perturbe' }}"
@@ -521,20 +607,6 @@ actions:
             else:
               - sequence: !input default_action
 
-      # --- 7. IGNORAR (Do Modo da Casa) ---
-      - conditions:
-          - condition: template
-            value_template: "{{ effective_state == 'Ignorar' }}"
-        sequence:
-          - stop: "Ação configurada para ser ignorada pelo Modo da Casa atual."
-
-      # --- 8. PADRÃO (Do Modo da Casa) ---
-      - conditions:
-          - condition: template
-            value_template: "{{ effective_state == 'Padrão' }}"
-        sequence:
-          - sequence: !input default_action
-
-    # --- CATCH-ALL ---
+    # --- 3. CATCH-ALL ---
     default:
       - sequence: !input default_action
