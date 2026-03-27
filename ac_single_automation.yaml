@@ -6,7 +6,7 @@ blueprint:
   source_url: https://www.github.com/theleoni/ha-blueprints
 
   name: "AC with Occupancy State variations"
-  description: "Gerencia as ações do Ar Condicionado baseado na ocupação do cômodo e Modo da Casa, suportando validações extras e ajustes externos (ex: controle remoto)."
+  description: "Gerencia as ações do Ar Condicionado baseado na ocupação do cômodo, Modo da Casa e travas térmicas individuais por modo de operação."
 
   #######              INPUT              #######
   input:
@@ -18,109 +18,273 @@ blueprint:
       input:
         ac_device:
           name: "Ar Condicionado"
-          selector:
-            entity:
-              domain: climate
+          selector: { entity: { domain: climate } }
         house_mode_entity:
           name: "Entidade do Modo da Casa"
           default: input_select.house_mode
-          selector:
-            entity:
-              domain: input_select
+          selector: { entity: { domain: input_select } }
         occupancy_selector:
           name: "Occupancy Seletor do Cômodo"
-          selector:
-            entity:
-              domain: input_select
+          selector: { entity: { domain: input_select } }
         is_daylight:
           name: "É dia? (Boolean)"
           default: input_boolean.daylight
-          selector:
-            entity:
-              domain: input_boolean
+          selector: { entity: { domain: input_boolean } }
+        thermal_comfort_selector:
+          name: "Seletor de Conforto Térmico"
+          description: "Entidade que centraliza a sensação térmica da casa."
+          default: input_select.temperature
+          selector: { entity: { domain: input_select } }
 
     # --- 2. GESTÃO DE AUSÊNCIA (VAZIO) ---
     absence_settings:
       name: "Configurações de Ausência (Vazio)"
-      description: "Delays aplicados antes de desligar o AC quando o estado efetivo for Vazio."
+      description: "Define o comportamento do AC quando não há ninguém. Comportamento: Modos 'Com Delay' e o Sensor do Cômodo aguardam os temporizadores (Dia/Noite). Modos 'Instantâneos' ignoram o tempo e desligam na hora."
       collapsed: false
       icon: mdi:account-off
       input:
+        delayed_empty_modes:
+          name: "Modos da Casa para Vazio (Com Delay)"
+          description: "Modos que assumem o estado 'Vazio', mas RESPEITAM os tempos de Delay configurados abaixo. Padrão: Ninguém em Casa e Férias."
+          default: ["Ninguém em Casa", "Férias"]
+          selector:
+            select:
+              multiple: true
+              custom_value: true
+              sort: false
+              options: &mode_options
+                - "Ninguém em Casa"
+                - "Férias"
+                - "Apenas Pets na Casa"
+                - "Faxina"
+                - "Visitas"
+                - "Cinema"
+                - "Dormindo"
+        instant_empty_modes:
+          name: "Modos da Casa para Vazio (Instantâneo)"
+          description: "Modos que assumem o estado 'Vazio' e forçam o desligamento IMEDIATO do AC, ignorando qualquer delay (Economia ativa)."
+          default: []
+          selector:
+            select:
+              multiple: true
+              custom_value: true
+              sort: false
+              options: *mode_options
         day_delay:
-          name: "Delay p/ desligar (Dia)"
+          name: "Delay do Sensor (Dia)"
+          description: "Tempo de espera antes de desligar durante o dia."
           default: { hours: 0, minutes: 30, seconds: 0 }
-          selector:
-            duration:
-              enable_day: false
+          selector: { duration: { enable_day: false } }
         night_delay:
-          name: "Delay p/ desligar (Noite)"
+          name: "Delay do Sensor (Noite)"
+          description: "Tempo de espera antes de desligar durante a noite."
           default: { hours: 0, minutes: 0, seconds: 0 }
-          selector:
-            duration:
-              enable_day: false
+          selector: { duration: { enable_day: false } }
 
-    # --- 3. GATILHOS E CONDIÇÕES ADICIONAIS ---
+    # --- 3. GATILHOS E CONDIÇÕES GLOBAIS ---
     additional_data:
-      name: "Gatilhos e Condições Adicionais"
-      description: "Refine o acionamento (ex: janelas devem estar fechadas)."
+      name: "Gatilhos e Condições Globais"
+      description: "Regras que afetam TODA a automação (ex: Janela principal deve estar fechada)."
       collapsed: false
       icon: mdi:filter-plus-outline
       input:
         additional_triggers:
-          name: "Gatilhos Adicionais"
+          name: "Gatilhos Adicionais Globais"
           default: []
-          selector:
-            trigger: {}
+          selector: { trigger: {} }
         additional_condition:
-          name: "Condições Adicionais"
+          name: "Condições Adicionais Globais"
           default: []
-          selector:
-            condition: {}
+          selector: { condition: {} }
         default_action:
           name: "Ação Padrão (Default)"
-          description: "Executada caso as Condições Adicionais falharem (ex: janela aberta)."
+          description: "Executada caso as Condições Globais falharem."
           default: []
-          selector:
-            action: {}
+          selector: { action: {} }
 
-    # --- 4. CONFIGURAÇÕES DOS MODOS DO AC ---
-    ac_modes_settings:
-      name: "Configurações por Modo de Operação"
-      description: "Ações executadas quando o AC está ativo no modo respectivo e o cômodo está ocupado."
+    # --- 4. CONFIGURAÇÕES GERAIS DO AC ---
+    ac_general_settings:
+      name: "Configurações Gerais do AC"
+      description: "Ajustes globais de comportamento do Ar Condicionado e depuração."
       collapsed: false
       icon: mdi:air-conditioner
       input:
+        enable_debug:
+          name: "Ativar Log de Debug"
+          description: "Registra as variáveis principais no Logbook e Traces para facilitar a identificação de problemas nas decisões tomadas pela automação."
+          default: false
+          selector: { boolean: {} }
         ac_state_debounce:
           name: "Debounce de Alteração de Modo"
-          description: "Tempo de espera após o AC ser ligado ou alterado para Frio, Ventilar, etc., antes do HA aplicar as ações detalhadas."
+          description: "Tempo de espera após o AC ser ligado ou alterado manualmente."
           default: { hours: 0, minutes: 0, seconds: 10 }
+          selector: { duration: { enable_day: false } }
+
+    # --- 5. MODO COOL (FRIO) ---
+    ac_mode_cool_section:
+      name: "Modo: Cool (Frio)"
+      description: "Ações, gatilhos e validações para o modo de refrigeração."
+      icon: mdi:snowflake
+      input:
+        cool_allowed_levels:
+          name: "Níveis Térmicos Permitidos (Frio)"
+          description: "O modo Frio só ligará ou será mantido se a temperatura estiver nestes níveis. Vazio ignora a trava."
+          default: []
           selector:
-            duration:
-              enable_day: false
+            select:
+              multiple: true
+              sort: false
+              options: &thermal_levels
+                - value: "Frozen"
+                  label: "1. Frozen"
+                - value: "Very Cold -3"
+                  label: "2. Very Cold"
+                - value: "Cold -2"
+                  label: "3. Cold"
+                - value: "Lightly Cold -1"
+                  label: "4. Lightly Cold"
+                - value: "Pleasant 0"
+                  label: "5. Pleasant"
+                - value: "Lightly Hot +1"
+                  label: "6. Lightly Hot"
+                - value: "Hot +2"
+                  label: "7. Hot"
+                - value: "Very Hot +3"
+                  label: "8. Very Hot"
+        cool_triggers:
+          name: "Gatilhos Específicos (Frio)"
+          description: "Eventos que acordam a automação para reavaliar este modo."
+          default: []
+          selector: { trigger: {} }
+        cool_require_on:
+          name: "Requer AC já ligado? (Frio)"
+          description: "Se desativado, ligará o AC proativamente. É útil para validar EM CONJUNTO com as 'Condições Globais' (ex: ligar sozinho apenas se a janela estiver fechada)."
+          default: true
+          selector: { boolean: {} }
+        cool_condition:
+          name: "Condições Específicas (Frio)"
+          description: "Validações extras requeridas para executar este modo (ex: temperatura > 25°C)."
+          default: []
+          selector: { condition: {} }
         cool_action:
-          name: "Ação para Modo: Cool (Frio)"
+          name: "Ação Padrão (Frio)"
+          description: "Executada quando o AC opera neste modo. Após o tempo configurado em 'Debounce', ela é aplicada (se existir) para garantir os parâmetros corretos do aparelho, mesmo se ele for ligado por fora (ex: controle remoto)."
+          default: []
+          selector: { action: {} }
+
+    # --- 6. MODO FAN (VENTILAÇÃO) ---
+    ac_mode_fan_section:
+      name: "Modo: Fan (Ventilação)"
+      description: "Ações, gatilhos e validações para o modo de ventilação."
+      icon: mdi:fan
+      input:
+        fan_allowed_levels:
+          name: "Níveis Térmicos Permitidos (Ventilação)"
+          description: "O modo Ventilação só ligará ou será mantido se a temperatura estiver nestes níveis. Vazio ignora a trava."
           default: []
           selector:
-            action: {}
+            select:
+              multiple: true
+              custom_value: true
+              sort: false
+              options: *thermal_levels
+        fan_triggers:
+          name: "Gatilhos Específicos (Ventilação)"
+          description: "Eventos que acordam a automação para reavaliar este modo."
+          default: []
+          selector: { trigger: {} }
+        fan_require_on:
+          name: "Requer AC já ligado? (Ventilação)"
+          description: "Se desativado, ligará o AC proativamente. É útil para validar EM CONJUNTO com as 'Condições Globais' (ex: ligar sozinho apenas se a janela estiver fechada)."
+          default: true
+          selector: { boolean: {} }
+        fan_condition:
+          name: "Condições Específicas (Ventilação)"
+          description: "Validações extras requeridas para executar este modo."
+          default: []
+          selector: { condition: {} }
         fan_action:
-          name: "Ação para Modo: Fan (Ventilação)"
+          name: "Ação Padrão (Ventilação)"
+          description: "Executada quando o AC opera neste modo. Após o tempo configurado em 'Debounce', ela é aplicada (se existir) para garantir os parâmetros corretos do aparelho, mesmo se ele for ligado por fora (ex: controle remoto)."
+          default: []
+          selector: { action: {} }
+
+    # --- 7. MODO DRY (SECAR) ---
+    ac_mode_dry_section:
+      name: "Modo: Dry (Secar)"
+      description: "Ações, gatilhos e validações para o modo de desumidificação."
+      icon: mdi:water-percent
+      input:
+        dry_allowed_levels:
+          name: "Níveis Térmicos Permitidos (Secar)"
+          description: "O modo Secar só ligará ou será mantido se a temperatura estiver nestes níveis. Vazio ignora a trava."
           default: []
           selector:
-            action: {}
+            select:
+              multiple: true
+              custom_value: true
+              sort: false
+              options: *thermal_levels
+        dry_triggers:
+          name: "Gatilhos Específicos (Secar)"
+          description: "Eventos que acordam a automação para reavaliar este modo."
+          default: []
+          selector: { trigger: {} }
+        dry_require_on:
+          name: "Requer AC já ligado? (Secar)"
+          description: "Se desativado, ligará o AC proativamente. É útil para validar EM CONJUNTO com as 'Condições Globais' (ex: ligar sozinho apenas se a janela estiver fechada)."
+          default: true
+          selector: { boolean: {} }
+        dry_condition:
+          name: "Condições Específicas (Secar)"
+          description: "Validações extras requeridas para executar este modo."
+          default: []
+          selector: { condition: {} }
         dry_action:
-          name: "Ação para Modo: Dry (Secar)"
+          name: "Ação Padrão (Secar)"
+          description: "Executada quando o AC opera neste modo. Após o tempo configurado em 'Debounce', ela é aplicada (se existir) para garantir os parâmetros corretos do aparelho, mesmo se ele for ligado por fora (ex: controle remoto)."
+          default: []
+          selector: { action: {} }
+
+    # --- 8. MODO HEAT (QUENTE) ---
+    ac_mode_heat_section:
+      name: "Modo: Heat (Quente)"
+      description: "Ações, gatilhos e validações para o modo de aquecimento."
+      icon: mdi:fire
+      input:
+        heat_allowed_levels:
+          name: "Níveis Térmicos Permitidos (Quente)"
+          description: "O modo Quente só ligará ou será mantido se a temperatura estiver nestes níveis. Vazio ignora a trava."
           default: []
           selector:
-            action: {}
+            select:
+              multiple: true
+              custom_value: true
+              sort: false
+              options: *thermal_levels
+        heat_triggers:
+          name: "Gatilhos Específicos (Quente)"
+          description: "Eventos que acordam a automação para reavaliar este modo."
+          default: []
+          selector: { trigger: {} }
+        heat_require_on:
+          name: "Requer AC já ligado? (Quente)"
+          description: "Se desativado, ligará o AC proativamente. É útil para validar EM CONJUNTO com as 'Condições Globais' (ex: ligar sozinho apenas se a janela estiver fechada)."
+          default: true
+          selector: { boolean: {} }
+        heat_condition:
+          name: "Condições Específicas (Quente)"
+          description: "Validações extras requeridas para executar este modo."
+          default: []
+          selector: { condition: {} }
         heat_action:
-          name: "Ação para Modo: Heat (Quente)"
+          name: "Ação Padrão (Quente)"
+          description: "Executada quando o AC opera neste modo. Após o tempo configurado em 'Debounce', ela é aplicada (se existir) para garantir os parâmetros corretos do aparelho, mesmo se ele for ligado por fora (ex: controle remoto)."
           default: []
-          selector:
-            action: {}
+          selector: { action: {} }
 
 #######         RUNNING CONFIG          #######
-mode: queued
-max: 2
+mode: restart
 
 #######             VARIABLES           #######
 variables:
@@ -128,24 +292,64 @@ variables:
   occupancy_selector_var: !input occupancy_selector
   house_mode_entity_var: !input house_mode_entity
   daylight_var: !input is_daylight
+  delayed_empty_modes_var: !input delayed_empty_modes
+  instant_empty_modes_var: !input instant_empty_modes
+  debug_enabled: !input enable_debug
 
-  # 1. Captura de Estados
+  # Trava Térmica - Seletores e Variáveis
+  thermal_ent: !input thermal_comfort_selector
+  current_thermal_level: "{{ states(thermal_ent) }}"
+
+  cool_allowed_var: !input cool_allowed_levels
+  cool_pass: "{{ cool_allowed_var | length == 0 or current_thermal_level in cool_allowed_var }}"
+
+  fan_allowed_var: !input fan_allowed_levels
+  fan_pass: "{{ fan_allowed_var | length == 0 or current_thermal_level in fan_allowed_var }}"
+
+  dry_allowed_var: !input dry_allowed_levels
+  dry_pass: "{{ dry_allowed_var | length == 0 or current_thermal_level in dry_allowed_var }}"
+
+  heat_allowed_var: !input heat_allowed_levels
+  heat_pass: "{{ heat_allowed_var | length == 0 or current_thermal_level in heat_allowed_var }}"
+
+  # Captura de Estados
   ac_state: "{{ states(ac_ent) }}"
   current_house_mode: "{{ states(house_mode_entity_var) }}"
   current_occupancy: "{{ states(occupancy_selector_var) }}"
   is_day: "{{ is_state(daylight_var, 'on') }}"
 
-  # 2. Lógica central: "Estado Efetivo"
+  # Estado Efetivo
   effective_state: >
-    {% if current_house_mode == 'Ninguém em Casa' %} Vazio
+    {% if current_house_mode in delayed_empty_modes_var or current_house_mode in instant_empty_modes_var %} Vazio
     {% elif current_house_mode == 'Apenas Pets na Casa' %} Pet
     {% elif current_house_mode == 'Não perturbe' %} Não perturbe
-    {% elif current_house_mode in ['Férias', 'Faxina', 'Visitas', 'Cinema', 'Dormindo'] %} {{ current_house_mode }}
+    {% elif current_house_mode in ['Faxina', 'Visitas', 'Cinema', 'Dormindo'] %} {{ current_house_mode }}
     {% else %} {{ current_occupancy }} {% endif %}
+
+  # Verificadores de Condições Específicas
+  cool_cond_var: !input cool_condition
+  has_cool_cond: "{{ cool_cond_var | length > 0 }}"
+  cool_req_on: !input cool_require_on
+
+  fan_cond_var: !input fan_condition
+  has_fan_cond: "{{ fan_cond_var | length > 0 }}"
+  fan_req_on: !input fan_require_on
+
+  dry_cond_var: !input dry_condition
+  has_dry_cond: "{{ dry_cond_var | length > 0 }}"
+  dry_req_on: !input dry_require_on
+
+  heat_cond_var: !input heat_condition
+  has_heat_cond: "{{ heat_cond_var | length > 0 }}"
+  heat_req_on: !input heat_require_on
 
 #######             TRIGGERS            #######
 triggers:
   - triggers: !input additional_triggers
+  - triggers: !input cool_triggers
+  - triggers: !input fan_triggers
+  - triggers: !input dry_triggers
+  - triggers: !input heat_triggers
 
   - trigger: state
     entity_id: input_boolean.runallautomation
@@ -156,16 +360,31 @@ triggers:
 
   - trigger: state
     entity_id: !input occupancy_selector
+    to: "Vazio"
+    for: !input day_delay
+    id: "vazio_delay"
 
-  # Gatilho exclusivo para mudanças de Modo do AC (Ignora quando é desligado)
+  - trigger: state
+    entity_id: !input occupancy_selector
+    to: "Vazio"
+    for: !input night_delay
+    id: "vazio_delay"
+
+  - trigger: state
+    entity_id: !input house_mode_entity
+    for: !input day_delay
+    id: "vazio_delay"
+
+  - trigger: state
+    entity_id: !input house_mode_entity
+    for: !input night_delay
+    id: "vazio_delay"
+
   - trigger: state
     entity_id: !input ac_device
-    to:
-      - "cool"
-      - "fan_only"
-      - "dry"
-      - "heat"
+    to: ["cool", "fan_only", "dry", "heat"]
     for: !input ac_state_debounce
+    id: "ac_change"
 
 #######            CONDITIONS           #######
 conditions:
@@ -175,59 +394,258 @@ conditions:
 
 #######              ACTIONS            #######
 actions:
-  # 1. Validação das Condições Adicionais (ex: Janelas Fechadas)
+  - if:
+      - condition: template
+        value_template: "{{ debug_enabled }}"
+    then:
+      - action: logbook.log
+        data:
+          name: "AC Blueprint Debug"
+          message: >
+            Gatilho: {{ trigger.id | default('N/A', true) }} |
+            Estado Efetivo: {{ effective_state }} |
+            Termico Atual: {{ current_thermal_level }} |
+            AC: {{ ac_state }}
+
+  # Validação das Condições GLOBAIS
   - if:
       - condition: and
         conditions: !input additional_condition
     then:
       - choose:
           # --- CENÁRIO 1: AMBIENTE VAZIO ---
-          # (Inclui "Férias" ou qualquer estado que resulte em Vazio)
           - conditions:
               - condition: template
                 value_template: "{{ effective_state == 'Vazio' }}"
             sequence:
               - if:
-                  - condition: template
-                    value_template: "{{ is_day }}"
-                then:
-                  - delay: !input day_delay
-                else:
-                  - delay: !input night_delay
-
-              # Só envia o comando se o AC ainda estiver ligado após o delay
-              - if:
-                  - condition: not
+                  - condition: or
                     conditions:
-                      - condition: state
-                        entity_id: !input ac_device
-                        state: "off"
-                then:
-                  - action: climate.turn_off
-                    target:
-                      entity_id: !input ac_device
+                      - condition: and
+                        conditions:
+                          - condition: trigger
+                            id: "vazio_delay"
+                          - condition: or
+                            conditions:
+                              - condition: state
+                                entity_id: !input occupancy_selector
+                                state: "Vazio"
+                                for: !input day_delay
+                              - condition: state
+                                entity_id: !input occupancy_selector
+                                state: "Vazio"
+                                for: !input night_delay
+                              - condition: state
+                                entity_id: !input house_mode_entity
+                                state: !input delayed_empty_modes
+                                for: !input day_delay
+                              - condition: state
+                                entity_id: !input house_mode_entity
+                                state: !input delayed_empty_modes
+                                for: !input night_delay
 
-          # --- CENÁRIO 2: AMBIENTE OCUPADO E AC LIGADO ---
-          # Ignora 'Vazio', 'Pet' e 'Não perturbe'. Para qualquer outro modo, gerencia o AC.
+                      - condition: and
+                        conditions:
+                          - condition: not
+                            conditions:
+                              - condition: trigger
+                                id: "vazio_delay"
+                          - condition: or
+                            conditions:
+                              - condition: template
+                                value_template: "{{ trigger.entity_id == 'input_boolean.runallautomation' }}"
+                              - condition: template
+                                value_template: "{{ current_house_mode in instant_empty_modes_var }}"
+                then:
+                  - if:
+                      - condition: not
+                        conditions:
+                          - condition: state
+                            entity_id: !input ac_device
+                            state: "off"
+                    then:
+                      - action: climate.turn_off
+                        target:
+                          entity_id: !input ac_device
+
+          # --- CENÁRIO 2: AMBIENTE OCUPADO ---
           - conditions:
               - condition: template
                 value_template: "{{ effective_state not in ['Vazio', 'Pet', 'Não perturbe'] }}"
-              - condition: not
-                conditions:
-                  - condition: state
-                    entity_id: !input ac_device
-                    state: "off"
             sequence:
               - choose:
-                  - conditions: "{{ ac_state == 'cool' }}"
+                  # [PILAR 2] PRIORIDADE 1: RESPEITO AO COMANDO MANUAL
+                  - conditions:
+                      - condition: trigger
+                        id: "ac_change"
+                      - condition: or
+                        conditions:
+                          # Cool válido e atende temperatura?
+                          - condition: and
+                            conditions:
+                              - condition: template
+                                value_template: "{{ ac_state == 'cool' and cool_pass }}"
+                              - condition: or
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ not has_cool_cond }}"
+                                  - condition: and
+                                    conditions: !input cool_condition
+                          # Fan válido e atende temperatura?
+                          - condition: and
+                            conditions:
+                              - condition: template
+                                value_template: "{{ ac_state == 'fan_only' and fan_pass }}"
+                              - condition: or
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ not has_fan_cond }}"
+                                  - condition: and
+                                    conditions: !input fan_condition
+                          # Dry válido e atende temperatura?
+                          - condition: and
+                            conditions:
+                              - condition: template
+                                value_template: "{{ ac_state == 'dry' and dry_pass }}"
+                              - condition: or
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ not has_dry_cond }}"
+                                  - condition: and
+                                    conditions: !input dry_condition
+                          # Heat válido e atende temperatura?
+                          - condition: and
+                            conditions:
+                              - condition: template
+                                value_template: "{{ ac_state == 'heat' and heat_pass }}"
+                              - condition: or
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ not has_heat_cond }}"
+                                  - condition: and
+                                    conditions: !input heat_condition
+                    sequence: []
+
+                  # --- LÓGICA: COOL (Com Validação Térmica do Frio) ---
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ cool_pass }}"
+                      - condition: or
+                        conditions:
+                          - condition: and
+                            conditions:
+                              - condition: template
+                                value_template: "{{ ac_state == 'cool' }}"
+                              - condition: or
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ not has_cool_cond }}"
+                                  - condition: and
+                                    conditions: !input cool_condition
+                          - condition: and
+                            conditions:
+                              - condition: template
+                                value_template: "{{ has_cool_cond }}"
+                              - condition: and
+                                conditions: !input cool_condition
+                              - condition: or
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ not cool_req_on }}"
+                                  - condition: template
+                                    value_template: "{{ ac_state != 'off' }}"
                     sequence: !input cool_action
-                  - conditions: "{{ ac_state == 'fan_only' }}"
+
+                  # --- LÓGICA: FAN (Com Validação Térmica de Ventilação) ---
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ fan_pass }}"
+                      - condition: or
+                        conditions:
+                          - condition: and
+                            conditions:
+                              - condition: template
+                                value_template: "{{ ac_state == 'fan_only' }}"
+                              - condition: or
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ not has_fan_cond }}"
+                                  - condition: and
+                                    conditions: !input fan_condition
+                          - condition: and
+                            conditions:
+                              - condition: template
+                                value_template: "{{ has_fan_cond }}"
+                              - condition: and
+                                conditions: !input fan_condition
+                              - condition: or
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ not fan_req_on }}"
+                                  - condition: template
+                                    value_template: "{{ ac_state != 'off' }}"
                     sequence: !input fan_action
-                  - conditions: "{{ ac_state == 'dry' }}"
+
+                  # --- LÓGICA: DRY (Com Validação Térmica de Secar) ---
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ dry_pass }}"
+                      - condition: or
+                        conditions:
+                          - condition: and
+                            conditions:
+                              - condition: template
+                                value_template: "{{ ac_state == 'dry' }}"
+                              - condition: or
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ not has_dry_cond }}"
+                                  - condition: and
+                                    conditions: !input dry_condition
+                          - condition: and
+                            conditions:
+                              - condition: template
+                                value_template: "{{ has_dry_cond }}"
+                              - condition: and
+                                conditions: !input dry_condition
+                              - condition: or
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ not dry_req_on }}"
+                                  - condition: template
+                                    value_template: "{{ ac_state != 'off' }}"
                     sequence: !input dry_action
-                  - conditions: "{{ ac_state == 'heat' }}"
+
+                  # --- LÓGICA: HEAT (Com Validação Térmica do Quente) ---
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ heat_pass }}"
+                      - condition: or
+                        conditions:
+                          - condition: and
+                            conditions:
+                              - condition: template
+                                value_template: "{{ ac_state == 'heat' }}"
+                              - condition: or
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ not has_heat_cond }}"
+                                  - condition: and
+                                    conditions: !input heat_condition
+                          - condition: and
+                            conditions:
+                              - condition: template
+                                value_template: "{{ has_heat_cond }}"
+                              - condition: and
+                                conditions: !input heat_condition
+                              - condition: or
+                                conditions:
+                                  - condition: template
+                                    value_template: "{{ not heat_req_on }}"
+                                  - condition: template
+                                    value_template: "{{ ac_state != 'off' }}"
                     sequence: !input heat_action
 
-    # 2. Executa a Ação Padrão se as condições adicionais falharem
+    # Executa a Ação Padrão se as Condições GLOBAIS falharem
     else:
       - sequence: !input default_action
